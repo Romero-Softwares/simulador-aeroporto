@@ -155,6 +155,100 @@
       text-shadow: 0 1px 2px #000;
       white-space: nowrap;
     }
+    #mobileControls {
+      display: none;
+    }
+
+    @media (any-pointer: coarse) {
+      #hud {
+        left: 10px;
+        top: 10px;
+        max-width: min(280px, calc(100vw - 20px));
+        padding: 9px 10px;
+        font-size: 12px;
+      }
+
+      #minimap {
+        right: 10px;
+        top: 10px;
+        width: 142px;
+        height: 142px;
+      }
+
+      #mobileControls {
+        position: fixed;
+        inset: 0;
+        z-index: 15;
+        display: block;
+        pointer-events: none;
+      }
+
+      #touchLook {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 50%;
+        pointer-events: auto;
+        touch-action: none;
+      }
+
+      #movePad {
+        position: absolute;
+        left: max(18px, env(safe-area-inset-left));
+        bottom: max(22px, env(safe-area-inset-bottom));
+        width: 126px;
+        height: 126px;
+        border: 2px solid rgba(255, 255, 255, 0.42);
+        border-radius: 50%;
+        box-sizing: border-box;
+        background: rgba(4, 15, 25, 0.32);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.32);
+        pointer-events: auto;
+        touch-action: none;
+      }
+
+      #moveStick {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 52px;
+        height: 52px;
+        margin: -26px;
+        border: 2px solid rgba(216, 255, 155, 0.9);
+        border-radius: 50%;
+        box-sizing: border-box;
+        background: rgba(216, 255, 155, 0.22);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.36);
+        pointer-events: none;
+      }
+
+      #flightButton {
+        position: absolute;
+        right: max(20px, env(safe-area-inset-right));
+        bottom: max(28px, env(safe-area-inset-bottom));
+        min-width: 112px;
+        min-height: 52px;
+        border: 1px solid rgba(216, 255, 155, 0.85);
+        border-radius: 13px;
+        color: #efffe0;
+        background: rgba(8, 29, 34, 0.72);
+        font: 700 13px Arial, Helvetica, sans-serif;
+        letter-spacing: 0.02em;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+        pointer-events: auto;
+        touch-action: manipulation;
+      }
+
+      #start .box {
+        margin: 20px;
+        padding: 22px;
+      }
+
+      #start h1 {
+        font-size: 23px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -171,6 +265,14 @@
     <canvas id="minimapCanvas" width="230" height="230"></canvas>
     <div id="minimapLabel">MAPA DA PISTA</div>
     <div id="minimapHint">pista em branco • seta vermelha indica o rumo</div>
+  </div>
+
+  <div id="mobileControls" aria-label="Controles para celular">
+    <div id="touchLook" aria-label="Arraste para olhar"></div>
+    <div id="movePad" aria-label="Joystick de movimento">
+      <div id="moveStick"></div>
+    </div>
+    <button id="flightButton" type="button">ENTRAR NO AVIÃO</button>
   </div>
 
   <div id="start">
@@ -252,6 +354,15 @@
     scene.add(ambient);
 
     const keys = new Set();
+    const touchEnabled = window.matchMedia("(any-pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+    const touchInput = {
+      forward: 0,
+      right: 0,
+      movePointerId: null,
+      lookPointerId: null,
+      lookX: 0,
+      lookY: 0
+    };
     const solidColliders = [];
     const sceneryObjects = [];
     const animatedObjects = [];
@@ -2933,8 +3044,8 @@
     function updatePlayer(delta) {
       if (aircraft.pilotMode) return;
 
-      const forwardInput = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
-      const rightInput = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
+      const forwardInput = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0) + touchInput.forward;
+      const rightInput = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) + touchInput.right;
 
       const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
       const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
@@ -3031,10 +3142,10 @@
       const minHeight = groundHeight + AIRCRAFT_GROUND_CLEARANCE;
 
       if (aircraft.pilotMode) {
-        const throttle = keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0;
-        const brake = keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0;
+        const throttle = keys.has("KeyW") || keys.has("ArrowUp") || touchInput.forward > 0.16 ? 1 : 0;
+        const brake = keys.has("KeyS") || keys.has("ArrowDown") || touchInput.forward < -0.16 ? 1 : 0;
         const turbo = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 1.45 : 1;
-        const turnInput = (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0) - (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0);
+        const turnInput = (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0) - (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - touchInput.right;
         const climbInput = (keys.has("Space") ? 1 : 0) - ((keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC")) ? 1 : 0);
 
         const targetEnginePower = throttle > 0 ? turbo : 0;
@@ -3395,6 +3506,102 @@
       requestAnimationFrame(animate);
     }
 
+    const movePad = document.getElementById("movePad");
+    const moveStick = document.getElementById("moveStick");
+    const touchLook = document.getElementById("touchLook");
+    const flightButton = document.getElementById("flightButton");
+
+    function updateTouchMovement(event) {
+      const bounds = movePad.getBoundingClientRect();
+      const centerX = bounds.left + bounds.width / 2;
+      const centerY = bounds.top + bounds.height / 2;
+      const maxDistance = bounds.width * 0.32;
+      let offsetX = event.clientX - centerX;
+      let offsetY = event.clientY - centerY;
+      const distance = Math.hypot(offsetX, offsetY);
+
+      if (distance > maxDistance) {
+        offsetX = (offsetX / distance) * maxDistance;
+        offsetY = (offsetY / distance) * maxDistance;
+      }
+
+      touchInput.right = offsetX / maxDistance;
+      touchInput.forward = -offsetY / maxDistance;
+      moveStick.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+    }
+
+    function resetTouchMovement() {
+      touchInput.forward = 0;
+      touchInput.right = 0;
+      touchInput.movePointerId = null;
+      moveStick.style.transform = "";
+    }
+
+    function applyTouchLook(deltaX, deltaY) {
+      if (aircraft.pilotMode) {
+        aircraft.yaw -= deltaX * 0.0022;
+        aircraft.pitch -= deltaY * 0.0024;
+        aircraft.pitch = clamp(aircraft.pitch, -0.42, 0.48);
+        return;
+      }
+
+      player.yaw -= deltaX * 0.005;
+      player.pitch -= deltaY * 0.005;
+      player.pitch = clamp(player.pitch, -Math.PI / 2 + 0.04, Math.PI / 2 - 0.04);
+    }
+
+    if (touchEnabled) {
+      movePad.addEventListener("pointerdown", (event) => {
+        if (touchInput.movePointerId !== null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        touchInput.movePointerId = event.pointerId;
+        movePad.setPointerCapture(event.pointerId);
+        updateTouchMovement(event);
+      });
+
+      movePad.addEventListener("pointermove", (event) => {
+        if (event.pointerId !== touchInput.movePointerId) return;
+        event.preventDefault();
+        updateTouchMovement(event);
+      });
+
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach((eventName) => {
+        movePad.addEventListener(eventName, (event) => {
+          if (event.pointerId === touchInput.movePointerId) resetTouchMovement();
+        });
+      });
+
+      touchLook.addEventListener("pointerdown", (event) => {
+        if (touchInput.lookPointerId !== null) return;
+        event.preventDefault();
+        touchInput.lookPointerId = event.pointerId;
+        touchInput.lookX = event.clientX;
+        touchInput.lookY = event.clientY;
+        touchLook.setPointerCapture(event.pointerId);
+      });
+
+      touchLook.addEventListener("pointermove", (event) => {
+        if (event.pointerId !== touchInput.lookPointerId) return;
+        event.preventDefault();
+        applyTouchLook(event.clientX - touchInput.lookX, event.clientY - touchInput.lookY);
+        touchInput.lookX = event.clientX;
+        touchInput.lookY = event.clientY;
+      });
+
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach((eventName) => {
+        touchLook.addEventListener(eventName, (event) => {
+          if (event.pointerId === touchInput.lookPointerId) touchInput.lookPointerId = null;
+        });
+      });
+
+      flightButton.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        toggleAircraftPilot();
+        flightButton.textContent = aircraft.pilotMode ? "SAIR DO AVIÃO" : "ENTRAR NO AVIÃO";
+      });
+    }
+
     document.addEventListener("keydown", (event) => {
       if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "Space", "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "KeyC", "KeyF", "KeyV"].includes(event.code)) {
         event.preventDefault();
@@ -3452,7 +3659,7 @@
         player.pitch = clamp(player.pitch, -0.18, 0.18);
       }
 
-      if (document.body.requestPointerLock && event && event.isTrusted) {
+      if (!touchEnabled && document.body.requestPointerLock && event && event.isTrusted) {
         const pointerLockRequest = document.body.requestPointerLock();
         if (pointerLockRequest && typeof pointerLockRequest.catch === "function") {
           pointerLockRequest.catch(() => {});
