@@ -1,0 +1,3502 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulador Realista - Aeroporto, Gravidade e Colisão</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #87b9e8;
+      font-family: Arial, Helvetica, sans-serif;
+      user-select: none;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      margin-left: -7px;
+      margin-top: -7px;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 2px #000;
+    }
+
+    #crosshair::before {
+      left: 6px;
+      top: 0;
+      width: 2px;
+      height: 14px;
+    }
+
+    #crosshair::after {
+      left: 0;
+      top: 6px;
+      width: 14px;
+      height: 2px;
+    }
+
+    #hud {
+      position: fixed;
+      left: 16px;
+      top: 16px;
+      z-index: 10;
+      color: white;
+      background: rgba(0, 0, 0, 0.42);
+      padding: 12px 14px;
+      border-radius: 10px;
+      line-height: 1.45;
+      font-size: 14px;
+      text-shadow: 0 1px 2px #000;
+      max-width: 360px;
+    }
+
+    #hud strong {
+      color: #d8ff9b;
+    }
+
+    #start {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(42, 74, 94, 0.55), rgba(0, 0, 0, 0.82));
+      color: white;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    #start .box {
+      background: rgba(0, 0, 0, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 18px;
+      padding: 28px 34px;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.45);
+    }
+
+    #start h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+    }
+
+    #start p {
+      margin: 6px 0;
+      opacity: 0.92;
+    }
+
+    #minimap {
+      position: fixed;
+      right: 16px;
+      top: 16px;
+      width: 230px;
+      height: 230px;
+      z-index: 11;
+      pointer-events: none;
+      border: 2px solid rgba(216, 255, 155, 0.82);
+      border-radius: 14px;
+      overflow: hidden;
+      background: radial-gradient(circle at center, rgba(32, 69, 43, 0.86), rgba(7, 19, 18, 0.92));
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    }
+
+    #minimap canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 12px;
+    }
+
+    #minimapLabel {
+      position: absolute;
+      left: 0;
+      top: -28px;
+      padding: 4px 8px;
+      border-radius: 7px;
+      background: rgba(0, 0, 0, 0.62);
+      color: #d8ff9b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-shadow: 0 1px 2px #000;
+      white-space: nowrap;
+    }
+
+    #minimapHint {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -22px;
+      padding: 3px 6px;
+      border-radius: 7px;
+      background: rgba(0, 0, 0, 0.48);
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 10px;
+      text-align: center;
+      text-shadow: 0 1px 2px #000;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <strong>Aeroporto realista ativo</strong><br />
+    WASD: mover | F: entrar/sair do avião | Shift: acelerar<br />
+    Espaço: subir | Ctrl: descer | Mouse: olhar<br />
+    Avião pronto na pista com voo arcade, câmera, gravidade e colisões.
+  </div>
+
+  <div id="crosshair"></div>
+
+  <div id="minimap">
+    <canvas id="minimapCanvas" width="230" height="230"></canvas>
+    <div id="minimapLabel">MAPA DA PISTA</div>
+    <div id="minimapHint">pista em branco • seta vermelha indica o rumo</div>
+  </div>
+
+  <div id="start">
+    <div class="box">
+      <h1>Simulador Realista com Aeroporto e Cidades</h1>
+      <p>Clique para entrar no mundo.</p>
+      <p>Agora há avião pilotável, pista, torre, hangares, cidades, ruas, casas, prédios, postes e carros.</p>
+      <p>Pressione <strong>F</strong> para pilotar. Use WASD, Espaço, Ctrl e Shift para voar.</p>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { MTLLoader } from "three/addons/loaders/MTLLoader.js";
+    import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+
+    const WORLD_SIZE = 1400;
+    const WORLD_HALF = WORLD_SIZE / 2;
+    const TERRAIN_SEGMENTS = 72;
+    const WORLD_CELL_SIZE = 160;
+    const TERRAIN_CELL_SEGMENTS = 4;
+    const CITY_MIN_AIRPORT_DISTANCE = 640;
+    const CITY_CORE_MIN_CELL = 4;
+    const CITY_CORE_MAX_CELL = 9;
+    const CITY_GREEN_BUFFER_CELLS = 2;
+    const CITY_FLAT_GRADE = 0.42;
+    const PLAYER_RADIUS = 1.05;
+    const PLAYER_HEIGHT = 2.15;
+    const EYE_HEIGHT = 1.72;
+    const GRAVITY = 28;
+    const WALK_SPEED = 8.5;
+    const RUN_SPEED = 14;
+    const JUMP_SPEED = 9.5;
+    const MAX_STEP_HEIGHT = 0.7;
+    const COLLISION_ITERATIONS = 4;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x8fc8f4);
+    scene.fog = new THREE.FogExp2(0x9ed0ef, 0.0032);
+
+    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.08, 2600);
+    camera.rotation.order = "YXZ";
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      powerPreference: "high-performance"
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const clock = new THREE.Clock();
+
+    const sun = new THREE.DirectionalLight(0xfff4d6, 3.2);
+    sun.position.set(90, 120, 55);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(512, 512);
+    sun.shadow.camera.left = -120;
+    sun.shadow.camera.right = 120;
+    sun.shadow.camera.top = 120;
+    sun.shadow.camera.bottom = -120;
+    sun.shadow.camera.near = 20;
+    sun.shadow.camera.far = 220;
+    scene.add(sun);
+
+    const ambient = new THREE.HemisphereLight(0xbfe3ff, 0x31451f, 1.45);
+    scene.add(ambient);
+
+    const keys = new Set();
+    const solidColliders = [];
+    const sceneryObjects = [];
+    const animatedObjects = [];
+    const propellers = [];
+    const trafficAircraft = [];
+    let detailedAircraftTemplate = null;
+    const generatedWorldCells = new Set();
+    const generatedTerrainCells = new Set();
+    const activeWorldCells = new Map();
+    const activeTerrainCells = new Map();
+    const pendingWorldCells = new Set();
+    const pendingTerrainCells = new Set();
+    const worldGenerationQueue = [];
+    const terrainGenerationQueue = [];
+    const WORLD_GENERATION_BUDGET_MS = 4;
+    const dynamicWorldStats = {
+      cells: 0,
+      terrainCells: 0,
+      objects: 0
+    };
+    const dynamicWorldGroup = new THREE.Group();
+    const dynamicTerrainGroup = new THREE.Group();
+    dynamicWorldGroup.name = "objetos-do-mundo-dinamico";
+    dynamicTerrainGroup.name = "terreno-do-mundo-dinamico";
+    scene.add(dynamicTerrainGroup);
+    scene.add(dynamicWorldGroup);
+
+    const RUNWAY_CENTER_Z = -18;
+    const RUNWAY_ASPHALT_LENGTH = 924;
+    const RUNWAY_START_Z = RUNWAY_CENTER_Z - RUNWAY_ASPHALT_LENGTH / 2 + 10;
+    // O avião do jogador fica no pátio de cargas, fora das pistas ativas.
+    const AIRCRAFT_START_X = -104;
+    const AIRCRAFT_START_Z = 142;
+    const PLAYER_START_X = AIRCRAFT_START_X + 18;
+    const PLAYER_START_Z = AIRCRAFT_START_Z;
+    const AIRCRAFT_MODEL_BASE_PATH = "./airplane_v2_L2.123c71795678-4b63-46c4-b2c6-549c45f4c806/";
+    const AIRCRAFT_MODEL_MTL = "11805_airplane_v2_L2.mtl";
+    const AIRCRAFT_MODEL_OBJ = "11805_airplane_v2_L2.obj";
+    const AIRCRAFT_GROUND_CLEARANCE = 0.54;
+    // A origem do modelo detalhado fica acima do pneu; este valor mantém as rodas sobre o asfalto.
+    const TRAFFIC_AIRCRAFT_GROUND_CLEARANCE = 0.64;
+
+    const player = {
+      position: new THREE.Vector3(PLAYER_START_X, 0, PLAYER_START_Z),
+      velocity: new THREE.Vector3(),
+      yaw: Math.PI,
+      pitch: -0.12,
+      grounded: false,
+      groundHeight: 0
+    };
+
+    const aircraft = {
+      group: null,
+      position: new THREE.Vector3(AIRCRAFT_START_X, 0, AIRCRAFT_START_Z),
+      velocity: new THREE.Vector3(),
+      yaw: Math.PI,
+      pitch: 0,
+      roll: 0,
+      speed: 0,
+      enginePower: 0,
+      pilotMode: false,
+      cockpitCamera: true,
+      flying: false,
+      autopilot: false,
+      autopilotPhase: "idle",
+      autopilotTimer: 0
+    };
+
+    const runwayMarker = {
+      x: 48,
+      z: -18,
+      width: 142,
+      length: 1120,
+      northZ: -578,
+      southZ: 542
+    };
+    const minimapCanvas = document.getElementById("minimapCanvas");
+    const minimapContext = minimapCanvas.getContext("2d");
+    const minimapRange = 980;
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function smoothstep(edge0, edge1, value) {
+      const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+      return t * t * (3 - 2 * t);
+    }
+
+    function noise2D(x, z) {
+      const n = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453123;
+      return n - Math.floor(n);
+    }
+
+    function valueNoise(x, z) {
+      const ix = Math.floor(x);
+      const iz = Math.floor(z);
+      const fx = x - ix;
+      const fz = z - iz;
+
+      const a = noise2D(ix, iz);
+      const b = noise2D(ix + 1, iz);
+      const c = noise2D(ix, iz + 1);
+      const d = noise2D(ix + 1, iz + 1);
+
+      const ux = fx * fx * (3 - 2 * fx);
+      const uz = fz * fz * (3 - 2 * fz);
+
+      return THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(a, b, ux),
+        THREE.MathUtils.lerp(c, d, ux),
+        uz
+      );
+    }
+
+    function fractalNoise(x, z) {
+      let total = 0;
+      let amplitude = 1;
+      let frequency = 0.012;
+      let normalizer = 0;
+
+      for (let octave = 0; octave < 6; octave++) {
+        total += valueNoise(x * frequency, z * frequency) * amplitude;
+        normalizer += amplitude;
+        amplitude *= 0.52;
+        frequency *= 2.08;
+      }
+
+      return total / normalizer;
+    }
+
+    function airportFlatMask(x, z) {
+      const stripMask = (centerX, halfWidth, halfLength) =>
+        (1 - smoothstep(halfWidth, halfWidth + 10, Math.abs(x - centerX))) *
+        (1 - smoothstep(halfLength, halfLength + 16, Math.abs(z + 18)));
+      const areaMask = (centerX, centerZ, halfWidth, halfLength) =>
+        (1 - smoothstep(halfWidth, halfWidth + 12, Math.abs(x - centerX))) *
+        (1 - smoothstep(halfLength, halfLength + 12, Math.abs(z - centerZ)));
+
+      const westRunway = stripMask(0, 30, 570);
+      const eastRunway = stripMask(96, 30, 570);
+      const parallelTaxiway = stripMask(48, 12, 598);
+      const passengerApron = areaMask(-118, -24, 112, 112);
+      const cargoApron = areaMask(-132, 142, 92, 64);
+      const serviceApron = areaMask(55, -38, 46, 82);
+
+      return Math.min(1, Math.max(westRunway, eastRunway, parallelTaxiway * 0.99, passengerApron * 0.98, cargoApron * 0.97, serviceApron * 0.96));
+    }
+
+    function naturalTerrainHeight(x, z) {
+      const hills = (fractalNoise(x, z) - 0.5) * 18;
+      const ridges = Math.sin(x * 0.025) * Math.cos(z * 0.021) * 3.2;
+      const valley = -smoothstep(40, 145, Math.abs(z + 22)) * 3.4;
+      const centerFlatten = 1 - smoothstep(0, 42, Math.sqrt(x * x + z * z));
+      return hills * (1 - centerFlatten * 0.74) + ridges + valley + centerFlatten * 1.2;
+    }
+
+    function isUrbanPlanningCell(cellX, cellZ) {
+      const absCellX = Math.abs(cellX);
+      const absCellZ = Math.abs(cellZ);
+      const sameSideQuadrant = cellX * cellZ > 0;
+      const urbanCore = sameSideQuadrant
+        && absCellX >= CITY_CORE_MIN_CELL
+        && absCellZ >= CITY_CORE_MIN_CELL
+        && absCellX <= CITY_CORE_MAX_CELL
+        && absCellZ <= CITY_CORE_MAX_CELL;
+      const airportConnector = (absCellX >= CITY_CORE_MIN_CELL && absCellZ <= 1)
+        || (absCellZ >= CITY_CORE_MIN_CELL && absCellX <= 1);
+
+      return urbanCore || airportConnector;
+    }
+
+    function isGreenReserveCell(cellX, cellZ) {
+      const absCellX = Math.abs(cellX);
+      const absCellZ = Math.abs(cellZ);
+      const oppositeSideQuadrant = cellX * cellZ < 0;
+      const farEnough = Math.max(absCellX, absCellZ) >= CITY_CORE_MIN_CELL - 1;
+
+      return oppositeSideQuadrant && farEnough;
+    }
+
+    function isUrbanBufferCell(cellX, cellZ) {
+      for (let dx = -CITY_GREEN_BUFFER_CELLS; dx <= CITY_GREEN_BUFFER_CELLS; dx++) {
+        for (let dz = -CITY_GREEN_BUFFER_CELLS; dz <= CITY_GREEN_BUFFER_CELLS; dz++) {
+          const neighborX = cellX + dx;
+          const neighborZ = cellZ + dz;
+
+          if (isUrbanPlanningCell(neighborX, neighborZ) && !isGreenReserveCell(neighborX, neighborZ)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    }
+
+    function getCityDistrictInfo(cellX, cellZ) {
+      const baseX = cellX * WORLD_CELL_SIZE;
+      const baseZ = cellZ * WORLD_CELL_SIZE;
+      const distanceFromAirport = Math.sqrt(baseX * baseX + baseZ * baseZ);
+      const seed = cellX * 92821 + cellZ * 68917;
+      const urbanNoise = seededRandom(seed + 501);
+      const nearAirportReserve = distanceFromAirport < CITY_MIN_AIRPORT_DISTANCE;
+      const districtAllowed = !nearAirportReserve && isUrbanPlanningCell(cellX, cellZ) && !isGreenReserveCell(cellX, cellZ);
+      const shouldCreateCity = districtAllowed;
+
+      return { baseX, baseZ, seed, urbanNoise, shouldCreateCity };
+    }
+
+    function urbanSeparationMask(x, z) {
+      let strongestMask = 0;
+      const centerCellX = Math.round(x / WORLD_CELL_SIZE);
+      const centerCellZ = Math.round(z / WORLD_CELL_SIZE);
+
+      for (let dx = -2; dx <= 2; dx++) {
+        for (let dz = -2; dz <= 2; dz++) {
+          const info = getCityDistrictInfo(centerCellX + dx, centerCellZ + dz);
+
+          if (!info.shouldCreateCity) continue;
+
+          const localX = Math.abs(x - info.baseX);
+          const localZ = Math.abs(z - info.baseZ);
+          const districtCore = 1 - smoothstep(138, 168, Math.max(localX, localZ));
+          const cityGreenBelt = 1 - smoothstep(168, 214, Math.max(localX, localZ));
+          strongestMask = Math.max(strongestMask, districtCore, cityGreenBelt * 0.52);
+        }
+      }
+
+      return strongestMask;
+    }
+
+    function cityFlatInfo(x, z) {
+      let strongestMask = 0;
+      let strongestGrade = 0;
+      const centerCellX = Math.round(x / WORLD_CELL_SIZE);
+      const centerCellZ = Math.round(z / WORLD_CELL_SIZE);
+
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const info = getCityDistrictInfo(centerCellX + dx, centerCellZ + dz);
+
+          if (!info.shouldCreateCity) continue;
+
+          const localX = Math.abs(x - info.baseX);
+          const localZ = Math.abs(z - info.baseZ);
+          const districtDistance = Math.max(localX, localZ);
+          const cityPlateau = 1 - smoothstep(134, 176, districtDistance);
+          const roadZ = (1 - smoothstep(27, 32, localX)) * (1 - smoothstep(100, 113, localZ));
+          const roadX = (1 - smoothstep(27, 32, localZ)) * (1 - smoothstep(100, 113, localX));
+          const intersection = 1 - smoothstep(40, 55, districtDistance);
+          const roadMask = Math.max(roadX, roadZ, intersection);
+          const flatMask = Math.max(cityPlateau, roadMask);
+
+          if (flatMask > strongestMask) {
+            strongestMask = flatMask;
+            strongestGrade = CITY_FLAT_GRADE;
+          }
+        }
+      }
+
+      return { mask: strongestMask, grade: strongestGrade };
+    }
+
+    function cityRoadFlatInfo(x, z) {
+      return cityFlatInfo(x, z);
+    }
+
+    function cityRoadFlatMask(x, z) {
+      return cityFlatInfo(x, z).mask;
+    }
+
+    function urbanAreaMask(x, z) {
+      let strongestMask = urbanSeparationMask(x, z) * 0.86;
+      const centerCellX = Math.round(x / WORLD_CELL_SIZE);
+      const centerCellZ = Math.round(z / WORLD_CELL_SIZE);
+
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const info = getCityDistrictInfo(centerCellX + dx, centerCellZ + dz);
+
+          if (!info.shouldCreateCity) continue;
+
+          const localX = Math.abs(x - info.baseX);
+          const localZ = Math.abs(z - info.baseZ);
+          const blockCore = 1 - smoothstep(112, 138, Math.max(localX, localZ));
+          const roadZClearance = (1 - smoothstep(42, 52, localX)) * (1 - smoothstep(116, 132, localZ));
+          const roadXClearance = (1 - smoothstep(42, 52, localZ)) * (1 - smoothstep(116, 132, localX));
+          const intersectionClearance = 1 - smoothstep(58, 78, Math.max(localX, localZ));
+          const sidewalkClearance = Math.max(roadXClearance, roadZClearance, intersectionClearance);
+          strongestMask = Math.max(strongestMask, blockCore, sidewalkClearance);
+        }
+      }
+
+      return strongestMask;
+    }
+
+    function terrainHeight(x, z) {
+      const naturalHeight = naturalTerrainHeight(x, z);
+      const airportGrade = 0.16 + THREE.MathUtils.clamp((z + 18) / 180, -0.45, 0.45) * 0.18;
+      const flatMask = airportFlatMask(x, z);
+      const airportHeight = THREE.MathUtils.lerp(naturalHeight, airportGrade, flatMask);
+      const cityFlat = cityFlatInfo(x, z);
+
+      if (cityFlat.mask <= 0) return airportHeight;
+
+      return THREE.MathUtils.lerp(airportHeight, cityFlat.grade, cityFlat.mask);
+    }
+
+    function terrainNormal(x, z) {
+      const sample = 0.45;
+      const left = terrainHeight(x - sample, z);
+      const right = terrainHeight(x + sample, z);
+      const back = terrainHeight(x, z - sample);
+      const front = terrainHeight(x, z + sample);
+      return new THREE.Vector3(left - right, sample * 2, back - front).normalize();
+    }
+
+    function createCanvasTexture(size, painter) {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      painter(ctx, size);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.anisotropy = 8;
+      return texture;
+    }
+
+    const grassTexture = createCanvasTexture(512, (ctx, size) => {
+      const gradient = ctx.createRadialGradient(size * 0.5, size * 0.45, size * 0.08, size * 0.5, size * 0.5, size * 0.78);
+      gradient.addColorStop(0, "#6f9f43");
+      gradient.addColorStop(0.5, "#4f8435");
+      gradient.addColorStop(1, "#315f28");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+
+      for (let i = 0; i < 18000; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const green = 105 + Math.random() * 70;
+        const red = 48 + Math.random() * 55;
+        const blue = 28 + Math.random() * 26;
+        ctx.fillStyle = `rgba(${red}, ${green}, ${blue}, ${0.12 + Math.random() * 0.28})`;
+        ctx.fillRect(x, y, 1 + Math.random() * 4, 1 + Math.random() * 4);
+      }
+
+      for (let i = 0; i < 900; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const length = 5 + Math.random() * 16;
+        const sway = Math.random() * 10 - 5;
+        ctx.strokeStyle = `rgba(190, 225, 118, ${0.045 + Math.random() * 0.11})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + sway, y - length);
+        ctx.stroke();
+      }
+
+      for (let i = 0; i < 120; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const radius = 20 + Math.random() * 95;
+        const patch = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        patch.addColorStop(0, `rgba(120, 160, 65, ${0.05 + Math.random() * 0.08})`);
+        patch.addColorStop(1, "rgba(70, 105, 45, 0)");
+        ctx.fillStyle = patch;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+    grassTexture.repeat.set(1, 1);
+
+    const barkTexture = createCanvasTexture(256, (ctx, size) => {
+      ctx.fillStyle = "#604126";
+      ctx.fillRect(0, 0, size, size);
+
+      for (let x = 0; x < size; x += 4) {
+        const shade = 55 + Math.random() * 70;
+        ctx.fillStyle = `rgba(${shade}, ${35 + Math.random() * 35}, ${18 + Math.random() * 22}, 0.9)`;
+        ctx.fillRect(x, 0, 2 + Math.random() * 5, size);
+      }
+
+      for (let i = 0; i < 600; i++) {
+        ctx.fillStyle = `rgba(20, 12, 6, ${0.18 + Math.random() * 0.28})`;
+        ctx.fillRect(Math.random() * size, Math.random() * size, 2 + Math.random() * 10, 1 + Math.random() * 4);
+      }
+    });
+    barkTexture.repeat.set(3, 2);
+
+    const leafTexture = createCanvasTexture(256, (ctx, size) => {
+      const gradient = ctx.createRadialGradient(size * 0.42, size * 0.34, 12, size / 2, size / 2, size * 0.72);
+      gradient.addColorStop(0, "#8fcb5a");
+      gradient.addColorStop(0.48, "#4f9636");
+      gradient.addColorStop(1, "#254f22");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, size, size);
+
+      for (let i = 0; i < 2600; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const green = 80 + Math.random() * 90;
+        ctx.fillStyle = `rgba(${25 + Math.random() * 45}, ${green}, ${22 + Math.random() * 35}, ${0.22 + Math.random() * 0.34})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, 2 + Math.random() * 5, 3 + Math.random() * 8, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (let i = 0; i < 90; i++) {
+        ctx.strokeStyle = `rgba(210, 245, 150, ${0.05 + Math.random() * 0.11})`;
+        ctx.beginPath();
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.random() * 34 - 17, y + Math.random() * 24 - 12);
+        ctx.stroke();
+      }
+    });
+
+    const rockTexture = createCanvasTexture(256, (ctx, size) => {
+      ctx.fillStyle = "#77776e";
+      ctx.fillRect(0, 0, size, size);
+
+      for (let i = 0; i < 7000; i++) {
+        const v = 80 + Math.random() * 85;
+        ctx.fillStyle = `rgba(${v}, ${v}, ${v * 0.94}, ${0.18 + Math.random() * 0.42})`;
+        ctx.fillRect(Math.random() * size, Math.random() * size, 1 + Math.random() * 3, 1 + Math.random() * 3);
+      }
+
+      for (let i = 0; i < 45; i++) {
+        ctx.strokeStyle = `rgba(35, 35, 32, ${0.15 + Math.random() * 0.25})`;
+        ctx.beginPath();
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.random() * 80 - 40, y + Math.random() * 80 - 40);
+        ctx.stroke();
+      }
+    });
+
+    const asphaltTexture = createCanvasTexture(512, (ctx, size) => {
+      ctx.fillStyle = "#24272a";
+      ctx.fillRect(0, 0, size, size);
+
+      for (let i = 0; i < 12000; i++) {
+        const v = 24 + Math.random() * 42;
+        ctx.fillStyle = `rgba(${v}, ${v + 2}, ${v + 4}, ${0.22 + Math.random() * 0.4})`;
+        ctx.fillRect(Math.random() * size, Math.random() * size, 1 + Math.random() * 3, 1 + Math.random() * 3);
+      }
+
+      for (let i = 0; i < 34; i++) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.035 + Math.random() * 0.055})`;
+        ctx.beginPath();
+        const y = Math.random() * size;
+        ctx.moveTo(0, y);
+        ctx.lineTo(size, y + Math.random() * 10 - 5);
+        ctx.stroke();
+      }
+    });
+    asphaltTexture.repeat.set(2, 36);
+
+    const terrainGeometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
+    terrainGeometry.rotateX(-Math.PI / 2);
+
+    const terrainPositions = terrainGeometry.attributes.position;
+    for (let i = 0; i < terrainPositions.count; i++) {
+      const x = terrainPositions.getX(i);
+      const z = terrainPositions.getZ(i);
+      terrainPositions.setY(i, terrainHeight(x, z));
+    }
+
+    terrainGeometry.computeVertexNormals();
+
+    const terrainMaterial = new THREE.MeshStandardMaterial({
+      map: grassTexture,
+      roughness: 0.95,
+      metalness: 0.02,
+      color: 0xffffff
+    });
+
+    const terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+
+    const sharedTreeTrunkGeometry = new THREE.CylinderGeometry(0.72, 1, 1, 7, 1);
+    const sharedLeafClusterGeometry = new THREE.IcosahedronGeometry(1, 2);
+
+    function createLeafCluster(size, material, offsetX, offsetY, offsetZ) {
+      const cluster = new THREE.Mesh(sharedLeafClusterGeometry, material);
+      cluster.position.set(offsetX, offsetY, offsetZ);
+      cluster.scale.set(size * 0.92, size * 0.68, size * 0.86);
+      cluster.rotation.set(Math.random() * 0.18, Math.random() * Math.PI * 2, Math.random() * 0.18);
+      cluster.castShadow = false;
+      cluster.receiveShadow = false;
+      return cluster;
+    }
+
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+      map: barkTexture,
+      roughness: 0.9,
+      metalness: 0.02
+    });
+
+    const leafMaterial = new THREE.MeshStandardMaterial({
+      map: leafTexture,
+      roughness: 0.9,
+      metalness: 0,
+      color: 0xd8ffb8
+    });
+
+    const rockMaterial = new THREE.MeshStandardMaterial({
+      map: rockTexture,
+      roughness: 0.96,
+      metalness: 0.03,
+      color: 0xb6b1a2
+    });
+
+    const runwayMaterial = new THREE.MeshStandardMaterial({
+      map: asphaltTexture,
+      roughness: 0.88,
+      metalness: 0.02,
+      color: 0x1a1c1f
+    });
+
+    const runwayLineMaterial = new THREE.MeshStandardMaterial({
+      color: 0xf4f1d6,
+      roughness: 0.72,
+      metalness: 0.01
+    });
+
+    const aircraftWhiteMaterial = new THREE.MeshStandardMaterial({
+      color: 0xe9edf2,
+      roughness: 0.48,
+      metalness: 0.18
+    });
+
+    const aircraftBlueMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1f5f9d,
+      roughness: 0.52,
+      metalness: 0.12
+    });
+
+    const glassMaterial = new THREE.MeshStandardMaterial({
+      color: 0x78c7ff,
+      roughness: 0.08,
+      metalness: 0.04,
+      transparent: true,
+      opacity: 0.38,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+
+    const darkGlassMaterial = new THREE.MeshStandardMaterial({
+      color: 0x16344d,
+      emissive: 0x062033,
+      emissiveIntensity: 0.18,
+      roughness: 0.04,
+      metalness: 0.02,
+      transparent: true,
+      opacity: 0.46,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+
+    const concreteMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb8b3a6,
+      roughness: 0.86,
+      metalness: 0.02
+    });
+
+    const hangarMaterial = new THREE.MeshStandardMaterial({
+      color: 0x7f8790,
+      roughness: 0.64,
+      metalness: 0.2
+    });
+
+    const roofMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3f4b57,
+      roughness: 0.58,
+      metalness: 0.26
+    });
+
+    const cityRoadMaterial = new THREE.MeshStandardMaterial({
+      color: 0x20242a,
+      roughness: 0.78,
+      metalness: 0.02
+    });
+
+    const cityRoadLineMaterial = new THREE.MeshBasicMaterial({
+      color: 0xfff2aa,
+      side: THREE.DoubleSide
+    });
+
+    const sidewalkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x9d9a91,
+      roughness: 0.82,
+      metalness: 0.02
+    });
+
+    const buildingMaterials = [
+      new THREE.MeshStandardMaterial({ color: 0x8f969f, roughness: 0.6, metalness: 0.08 }),
+      new THREE.MeshStandardMaterial({ color: 0xb8a78d, roughness: 0.72, metalness: 0.03 }),
+      new THREE.MeshStandardMaterial({ color: 0x6f8090, roughness: 0.56, metalness: 0.1 }),
+      new THREE.MeshStandardMaterial({ color: 0xa2a7ad, roughness: 0.64, metalness: 0.07 })
+    ];
+
+    const houseWallMaterials = [
+      new THREE.MeshStandardMaterial({ color: 0xd8c4a4, roughness: 0.76, metalness: 0.02 }),
+      new THREE.MeshStandardMaterial({ color: 0xcfd8c7, roughness: 0.78, metalness: 0.02 }),
+      new THREE.MeshStandardMaterial({ color: 0xd7b1a4, roughness: 0.74, metalness: 0.02 })
+    ];
+
+    const houseRoofMaterials = [
+      new THREE.MeshStandardMaterial({ color: 0x8f2f24, roughness: 0.7, metalness: 0.02 }),
+      new THREE.MeshStandardMaterial({ color: 0x5a4a3f, roughness: 0.72, metalness: 0.04 }),
+      new THREE.MeshStandardMaterial({ color: 0x314459, roughness: 0.66, metalness: 0.08 })
+    ];
+
+    const cityWindowMaterial = new THREE.MeshStandardMaterial({
+      color: 0x95d8ff,
+      emissive: 0x1c6f9b,
+      emissiveIntensity: 0.36,
+      roughness: 0.18,
+      metalness: 0.02
+    });
+
+    const streetLightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffe8a0,
+      emissive: 0xffc24d,
+      emissiveIntensity: 1.25,
+      roughness: 0.22
+    });
+
+    const poleMaterial = new THREE.MeshStandardMaterial({
+      color: 0x555c62,
+      roughness: 0.48,
+      metalness: 0.42
+    });
+
+    const carMaterials = [
+      new THREE.MeshStandardMaterial({ color: 0xd93636, roughness: 0.42, metalness: 0.18 }),
+      new THREE.MeshStandardMaterial({ color: 0x2e65d5, roughness: 0.38, metalness: 0.2 }),
+      new THREE.MeshStandardMaterial({ color: 0xf0d34d, roughness: 0.44, metalness: 0.15 }),
+      new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.36, metalness: 0.22 })
+    ];
+
+    function addCylinderCollider(x, z, radius, height, yBase, label) {
+      solidColliders.push({
+        type: "cylinder",
+        x,
+        z,
+        radius,
+        height,
+        yMin: yBase,
+        yMax: yBase + height,
+        label
+      });
+    }
+
+    function addSphereCollider(x, z, radius, yCenter, label) {
+      solidColliders.push({
+        type: "sphere",
+        x,
+        z,
+        radius,
+        yCenter,
+        label
+      });
+    }
+
+    function addTree(x, z, scale) {
+      if (urbanAreaMask(x, z) > 0.04 || cityRoadFlatMask(x, z) > 0.01) return null;
+
+      const y = terrainHeight(x, z);
+
+      const tree = new THREE.Group();
+      tree.position.set(x, y, z);
+      tree.rotation.y = Math.random() * Math.PI * 2;
+
+      const trunkHeight = 4.25 * scale;
+      const trunkRadius = 0.34 * scale;
+      const trunk = new THREE.Mesh(sharedTreeTrunkGeometry, trunkMaterial);
+      trunk.position.y = trunkHeight / 2;
+      trunk.scale.set(trunkRadius, trunkHeight, trunkRadius);
+      trunk.castShadow = false;
+      trunk.receiveShadow = false;
+      tree.add(trunk);
+
+      const leafSize = 2.35 * scale;
+      const leafBaseY = trunkHeight * 0.98;
+      const canopySeed = x * 0.17 + z * 0.11;
+
+      tree.add(createLeafCluster(leafSize * 1.08, leafMaterial, 0, leafBaseY + leafSize * 0.22, 0));
+      tree.add(createLeafCluster(leafSize * 0.82, leafMaterial, -leafSize * (0.38 + seededRandom(canopySeed) * 0.18), leafBaseY, leafSize * 0.12));
+      tree.add(createLeafCluster(leafSize * 0.78, leafMaterial, leafSize * (0.34 + seededRandom(canopySeed + 1) * 0.18), leafBaseY - leafSize * 0.04, -leafSize * 0.16));
+      tree.add(createLeafCluster(leafSize * 0.62, leafMaterial, leafSize * 0.08, leafBaseY + leafSize * 0.48, leafSize * (0.28 + seededRandom(canopySeed + 2) * 0.16)));
+
+      scene.add(tree);
+      sceneryObjects.push(tree);
+      addCylinderCollider(x, z, trunkRadius + 0.28, trunkHeight, y, "árvore");
+    }
+
+    function addRock(x, z, scale) {
+      if (urbanAreaMask(x, z) > 0.03 || cityRoadFlatMask(x, z) > 0.01) return null;
+
+      const y = terrainHeight(x, z);
+      const normal = terrainNormal(x, z);
+
+      const geometry = new THREE.IcosahedronGeometry(1.15 * scale, 2);
+      const rock = new THREE.Mesh(geometry, rockMaterial);
+      rock.position.set(x, y + 0.58 * scale, z);
+      rock.scale.set(
+        1.15 + Math.random() * 0.75,
+        0.62 + Math.random() * 0.48,
+        0.9 + Math.random() * 0.65
+      );
+      rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+
+      const up = new THREE.Vector3(0, 1, 0);
+      rock.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(up, normal));
+
+      scene.add(rock);
+      sceneryObjects.push(rock);
+      addSphereCollider(x, z, 1.28 * scale, y + 0.75 * scale, "pedra");
+    }
+
+    function canPlaceObject(x, z, radius) {
+      const cellX = Math.round(x / WORLD_CELL_SIZE);
+      const cellZ = Math.round(z / WORLD_CELL_SIZE);
+
+      if (Math.sqrt(x * x + z * z) < 18) return false;
+      if (airportFlatMask(x, z) > 0.04) return false;
+      if (Math.abs(x) < 30 + radius && z > -540 - radius && z < 504 + radius) return false;
+      if (x > 24 - radius && x < 74 + radius && z > -55 - radius && z < 35 + radius) return false;
+      if (x < -30 + radius && x > -88 - radius && z > -66 - radius && z < 18 + radius) return false;
+      if (!isGreenReserveCell(cellX, cellZ) || isUrbanBufferCell(cellX, cellZ)) return false;
+      if (urbanAreaMask(x, z) > 0.01 || cityRoadFlatMask(x, z) > 0.002) return false;
+
+      const slope = terrainNormal(x, z).angleTo(new THREE.Vector3(0, 1, 0));
+      if (slope > 0.72) return false;
+
+      return true;
+    }
+
+    function canPlaceUrbanObject(x, z, radius) {
+      if (Math.sqrt(x * x + z * z) < 18) return false;
+      if (Math.abs(x) < 30 + radius && z > -540 - radius && z < 504 + radius) return false;
+      if (x > 24 - radius && x < 74 + radius && z > -55 - radius && z < 35 + radius) return false;
+      if (x < -30 + radius && x > -88 - radius && z > -66 - radius && z < 18 + radius) return false;
+      if (urbanAreaMask(x, z) < 0.18) return false;
+
+      const centerCellX = Math.round(x / WORLD_CELL_SIZE);
+      const centerCellZ = Math.round(z / WORLD_CELL_SIZE);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          const info = getCityDistrictInfo(centerCellX + dx, centerCellZ + dz);
+          if (!info.shouldCreateCity) continue;
+
+          const localX = Math.abs(x - info.baseX);
+          const localZ = Math.abs(z - info.baseZ);
+          const roadZ = (1 - smoothstep(34 + radius, 44 + radius, localX)) * (1 - smoothstep(100, 122, localZ));
+          const roadX = (1 - smoothstep(34 + radius, 44 + radius, localZ)) * (1 - smoothstep(100, 122, localX));
+          const intersection = 1 - smoothstep(48 + radius, 66 + radius, Math.max(localX, localZ));
+          if (Math.max(roadX, roadZ, intersection) > 0.03) return false;
+        }
+      }
+
+      const slope = terrainNormal(x, z).angleTo(new THREE.Vector3(0, 1, 0));
+      if (slope > 0.62) return false;
+
+      for (const collider of solidColliders) {
+        const dx = x - collider.x;
+        const dz = z - collider.z;
+        const minDistance = radius + collider.radius + 1.2;
+        if (dx * dx + dz * dz < minDistance * minDistance) return false;
+      }
+
+      return true;
+    }
+
+    function createConformedGroundMesh(width, length, centerX, centerZ, material, segmentsX = 8, segmentsZ = 56, yOffset = 0.045) {
+      const geometry = new THREE.PlaneGeometry(width, length, segmentsX, segmentsZ);
+      geometry.rotateX(-Math.PI / 2);
+
+      const positions = geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const worldX = centerX + positions.getX(i);
+        const worldZ = centerZ + positions.getZ(i);
+        positions.setY(i, terrainHeight(worldX, worldZ) + yOffset);
+      }
+
+      geometry.computeVertexNormals();
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(centerX, 0, centerZ);
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      return mesh;
+    }
+
+    function createFlatGroundPlane(width, length, x, z, material, yOffset = 0.075) {
+      const y = terrainHeight(x, z) + yOffset;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, length), material);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(x, y, z);
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      return mesh;
+    }
+
+    function addBoxObject(width, height, depth, x, z, material, label) {
+      const y = terrainHeight(x, z);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+      mesh.position.set(x, y + height / 2, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+
+      addCylinderCollider(x, z, Math.max(width, depth) * 0.58, height, y, label);
+      return mesh;
+    }
+
+    function addRunwayStrip(centerX, designation) {
+      createConformedGroundMesh(58, 1160, centerX, -18, concreteMaterial, 4, 252, 0.025);
+      createConformedGroundMesh(38, 1080, centerX, -18, runwayMaterial, 8, 448, 0.075);
+
+      for (let z = -516; z <= 480; z += 20) {
+        createFlatGroundPlane(1.55, 11, centerX, z, runwayLineMaterial, 0.135);
+      }
+
+      for (const z of [-552, 516]) {
+        createFlatGroundPlane(28, 1.3, centerX, z, runwayLineMaterial, 0.115);
+        for (let offset = -11; offset <= 11; offset += 5.5) {
+          createFlatGroundPlane(2.1, 8, centerX + offset, z + (z < 0 ? 8 : -8), runwayLineMaterial, 0.13);
+        }
+      }
+
+      const runwayLightMaterial = new THREE.MeshStandardMaterial({ color: 0xfff1aa, emissive: 0xffcc55, emissiveIntensity: 0.9 });
+      for (const side of [-1, 1]) {
+        for (let z = -536; z <= 500; z += 18) {
+          const light = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.16, 10), runwayLightMaterial);
+          light.position.set(centerX + side * 16, terrainHeight(centerX + side * 16, z) + 0.18, z);
+          scene.add(light);
+        }
+      }
+
+      addAirportSign(designation, centerX, -566, "#ffffff", 0.7);
+    }
+
+    function addRunway() {
+      addRunwayStrip(0, "10L / 28R");
+      addRunwayStrip(96, "10R / 28L");
+      createConformedGroundMesh(18, 1190, 48, -18, concreteMaterial, 4, 252, 0.055);
+      createConformedGroundMesh(142, 204, -104, -24, concreteMaterial, 10, 28, 0.05);
+      createConformedGroundMesh(116, 126, -130, 142, concreteMaterial, 8, 18, 0.05);
+    }
+
+    function createLandingGearAssembly() {
+      const gearGroup = new THREE.Group();
+      gearGroup.name = "trem-de-pouso-visivel";
+      gearGroup.position.y = 1.48;
+
+      const tireMaterial = new THREE.MeshStandardMaterial({
+        color: 0x111315,
+        roughness: 0.82,
+        metalness: 0.08
+      });
+      const hubMaterial = new THREE.MeshStandardMaterial({
+        color: 0xc8d0d5,
+        roughness: 0.34,
+        metalness: 0.72
+      });
+      const strutMaterial = new THREE.MeshStandardMaterial({
+        color: 0x9fa9ad,
+        roughness: 0.28,
+        metalness: 0.86
+      });
+
+      function addWheel(x, y, z, radius = 0.38, width = 0.24) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 28), tireMaterial);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(x, y, z);
+        wheel.castShadow = true;
+        wheel.receiveShadow = true;
+        gearGroup.add(wheel);
+
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * 0.42, radius * 0.42, width * 1.04, 20), hubMaterial);
+        hub.rotation.x = Math.PI / 2;
+        hub.position.copy(wheel.position);
+        hub.castShadow = true;
+        gearGroup.add(hub);
+
+        return wheel;
+      }
+
+      function addStrut(x, y, z, height, leanX = 0, leanZ = 0) {
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.044, height, 12), strutMaterial);
+        strut.position.set(x, y + height * 0.5, z);
+        strut.rotation.z = leanX;
+        strut.rotation.x = leanZ;
+        strut.castShadow = true;
+        gearGroup.add(strut);
+        return strut;
+      }
+
+      for (const side of [-1, 1]) {
+        const rearGearZ = side * 0.62;
+        const innerWheelZ = rearGearZ - side * 0.28;
+        const outerWheelZ = rearGearZ + side * 0.28;
+        const axleZ = (innerWheelZ + outerWheelZ) * 0.5;
+
+        addWheel(-1.08, -1.52, innerWheelZ, 0.42, 0.18);
+        addWheel(-1.08, -1.52, outerWheelZ, 0.42, 0.18);
+        addStrut(-1.08, -1.52, axleZ, 0.92, side * 0.028, -side * 0.022);
+
+        const rearAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.84, 14), strutMaterial);
+        rearAxle.position.set(-1.08, -1.52, axleZ);
+        rearAxle.rotation.x = Math.PI / 2;
+        rearAxle.castShadow = true;
+        gearGroup.add(rearAxle);
+
+        const rearAxleConnector = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.32, 0.18), strutMaterial);
+        rearAxleConnector.position.set(-1.08, -1.37, axleZ);
+        rearAxleConnector.rotation.x = side * 0.04;
+        rearAxleConnector.castShadow = true;
+        gearGroup.add(rearAxleConnector);
+
+        const rearAxleClamp = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.32), strutMaterial);
+        rearAxleClamp.position.set(-1.08, -1.52, axleZ);
+        rearAxleClamp.castShadow = true;
+        gearGroup.add(rearAxleClamp);
+
+        const brace = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.07, 1.12), strutMaterial);
+        brace.position.set(-1.08, -1.02, side * 0.31);
+        brace.rotation.x = side * 0.08;
+        brace.castShadow = true;
+        gearGroup.add(brace);
+      }
+
+      addWheel(3.72, -1.64, -0.16, 0.3, 0.18);
+      addWheel(3.72, -1.64, 0.16, 0.3, 0.18);
+      addStrut(3.72, -1.64, 0, 0.68, -0.08, 0);
+
+      const noseAxle = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.48, 12), strutMaterial);
+      noseAxle.position.set(3.72, -1.64, 0);
+      noseAxle.rotation.x = Math.PI / 2;
+      noseAxle.castShadow = true;
+      gearGroup.add(noseAxle);
+
+
+
+      return gearGroup;
+    }
+
+    function prepareDetailedAirplaneModel(model) {
+      const targetLength = 12.4;
+      model.name = "modelo-real-do-aviao";
+      model.position.set(0, 0, 0);
+      model.rotation.set(0, 0, 0);
+      model.scale.setScalar(1);
+      model.updateMatrixWorld(true);
+
+      const sourceBox = new THREE.Box3().setFromObject(model);
+      const sourceSize = sourceBox.getSize(new THREE.Vector3());
+      const sourceLength = Math.max(sourceSize.x, sourceSize.y, sourceSize.z, 0.001);
+      const scale = targetLength / sourceLength;
+
+      model.scale.setScalar(scale);
+      model.rotation.set(-Math.PI / 2, 0, -Math.PI / 2);
+      model.updateMatrixWorld(true);
+
+      const fittedBox = new THREE.Box3().setFromObject(model);
+      const fittedCenter = fittedBox.getCenter(new THREE.Vector3());
+      model.position.x -= fittedCenter.x;
+      model.position.z -= fittedCenter.z;
+
+      model.updateMatrixWorld(true);
+      const groundedBox = new THREE.Box3().setFromObject(model);
+      const wheelClearance = 0.34;
+      const visualLandingGearBottomY = -0.46;
+      const desiredGroundedBottomY = visualLandingGearBottomY + wheelClearance;
+      model.position.y -= groundedBox.min.y - desiredGroundedBottomY;
+
+      model.traverse((child) => {
+        if (!child.isMesh) return;
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+        if (child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          for (const material of materials) {
+            material.side = THREE.DoubleSide;
+            material.needsUpdate = true;
+          }
+        }
+      });
+
+      return model;
+    }
+
+    function loadDetailedAirplaneModel(group) {
+      const materialsLoader = new MTLLoader();
+      materialsLoader.setPath(AIRCRAFT_MODEL_BASE_PATH);
+      materialsLoader.load(
+        AIRCRAFT_MODEL_MTL,
+        (materials) => {
+          materials.preload();
+
+          const objectLoader = new OBJLoader();
+          objectLoader.setMaterials(materials);
+          objectLoader.setPath(AIRCRAFT_MODEL_BASE_PATH);
+          objectLoader.load(
+            AIRCRAFT_MODEL_OBJ,
+            (object) => {
+              const detailedModel = prepareDetailedAirplaneModel(object);
+              for (const child of group.children) {
+                child.visible = false;
+              }
+              group.add(detailedModel);
+              group.add(createLandingGearAssembly());
+              detailedAircraftTemplate = detailedModel;
+              aircraft.detailedModelLoaded = true;
+              applyDetailedModelToAutonomousTraffic();
+            },
+            undefined,
+            (error) => {
+              console.warn("Nao foi possivel carregar o modelo OBJ do aviao. Mantendo modelo procedural.", error);
+            }
+          );
+        },
+        undefined,
+        (error) => {
+          console.warn("Nao foi possivel carregar os materiais MTL do aviao. Mantendo modelo procedural.", error);
+        }
+      );
+    }
+
+    function addAirplane() {
+      const group = new THREE.Group();
+      const x = AIRCRAFT_START_X;
+      const z = AIRCRAFT_START_Z;
+      const aircraftVisualScale = 1.35;
+      const y = terrainHeight(x, z) + AIRCRAFT_GROUND_CLEARANCE;
+      aircraft.position.set(x, y, z);
+      aircraft.yaw = -Math.PI / 2;
+      aircraft.pitch = 0;
+      aircraft.roll = 0;
+      aircraft.speed = 0;
+      aircraft.enginePower = 0;
+      aircraft.velocity.set(0, 0, 0);
+      group.position.copy(aircraft.position);
+      group.rotation.order = "YXZ";
+      group.rotation.set(aircraft.roll, aircraft.yaw, aircraft.pitch);
+      group.scale.setScalar(aircraftVisualScale);
+      loadDetailedAirplaneModel(group);
+
+      const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(1.25, 9.8, 10, 24), aircraftWhiteMaterial);
+      fuselage.rotation.z = Math.PI / 2;
+      fuselage.castShadow = true;
+      fuselage.receiveShadow = true;
+      group.add(fuselage);
+
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(1.18, 2.35, 24), aircraftWhiteMaterial);
+      nose.rotation.z = -Math.PI / 2;
+      nose.position.x = 6.05;
+      nose.castShadow = true;
+      group.add(nose);
+
+      const tailCone = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.8, 20), aircraftBlueMaterial);
+      tailCone.rotation.z = Math.PI / 2;
+      tailCone.position.x = -5.85;
+      tailCone.castShadow = true;
+      group.add(tailCone);
+
+      const cockpitFrameMaterial = new THREE.MeshStandardMaterial({ color: 0x1a232b, roughness: 0.48, metalness: 0.42 });
+      const cockpitDashMaterial = new THREE.MeshStandardMaterial({ color: 0x101820, roughness: 0.76, metalness: 0.12 });
+      const cockpitPanelMaterial = new THREE.MeshStandardMaterial({ color: 0x26313b, roughness: 0.62, metalness: 0.22 });
+      const cockpitSeatMaterial = new THREE.MeshStandardMaterial({ color: 0x171b20, roughness: 0.82, metalness: 0.04 });
+      const warningMaterial = new THREE.MeshStandardMaterial({ color: 0xff5a35, emissive: 0xff2200, emissiveIntensity: 0.42, roughness: 0.36 });
+      const greenButtonMaterial = new THREE.MeshStandardMaterial({ color: 0x45ff8c, emissive: 0x16d75b, emissiveIntensity: 0.52, roughness: 0.28 });
+      const blueButtonMaterial = new THREE.MeshStandardMaterial({ color: 0x49a8ff, emissive: 0x1574ff, emissiveIntensity: 0.46, roughness: 0.28 });
+      const instrumentFaceMaterial = new THREE.MeshStandardMaterial({ color: 0x07131d, emissive: 0x04111b, emissiveIntensity: 0.34, roughness: 0.24 });
+      const instrumentNeedleMaterial = new THREE.MeshStandardMaterial({ color: 0xfff0a0, emissive: 0xffaa33, emissiveIntensity: 0.55 });
+      const navScreenMaterial = new THREE.MeshStandardMaterial({ color: 0x102b1e, emissive: 0x20ff91, emissiveIntensity: 0.65, roughness: 0.2 });
+      const radarMaterial = new THREE.MeshStandardMaterial({ color: 0x061721, emissive: 0x24d9ff, emissiveIntensity: 0.54, roughness: 0.22 });
+      const exteriorWindshieldMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8fd8ff,
+        emissive: 0x1f6fa0,
+        emissiveIntensity: 0.08,
+        roughness: 0.05,
+        metalness: 0.02,
+        transparent: true,
+        opacity: 0.18,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+
+      const cockpitFairing = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 14), aircraftWhiteMaterial);
+      cockpitFairing.position.set(3.55, 0.43, 0);
+      cockpitFairing.scale.set(1.42, 0.5, 0.88);
+      cockpitFairing.castShadow = true;
+      group.add(cockpitFairing);
+
+      const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.95, 28, 14), exteriorWindshieldMaterial);
+      cockpit.position.set(3.78, 0.72, 0);
+      cockpit.scale.set(1.1, 0.45, 0.76);
+      cockpit.castShadow = false;
+      group.add(cockpit);
+
+      const windshieldGlass = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.62, 1.12), exteriorWindshieldMaterial);
+      windshieldGlass.position.set(4.34, 0.72, 0);
+      windshieldGlass.rotation.z = -0.24;
+      windshieldGlass.castShadow = false;
+      group.add(windshieldGlass);
+
+      const cockpitBrow = new THREE.Mesh(new THREE.BoxGeometry(1.36, 0.1, 1.22), cockpitFrameMaterial);
+      cockpitBrow.position.set(4.12, 0.98, 0);
+      cockpitBrow.rotation.z = -0.18;
+      group.add(cockpitBrow);
+
+      const windshieldCenterPost = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.72, 0.08), cockpitFrameMaterial);
+      windshieldCenterPost.position.set(4.5, 0.73, 0);
+      windshieldCenterPost.rotation.z = -0.24;
+      group.add(windshieldCenterPost);
+
+      const windshieldBottomFrame = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.08, 1.18), cockpitFrameMaterial);
+      windshieldBottomFrame.position.set(4.16, 0.42, 0);
+      windshieldBottomFrame.rotation.z = -0.18;
+      group.add(windshieldBottomFrame);
+
+      for (const side of [-1, 1]) {
+        const frontPane = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.54, 0.08), exteriorWindshieldMaterial);
+        frontPane.position.set(4.46, 0.71, side * 0.32);
+        frontPane.rotation.z = -0.24;
+        frontPane.rotation.y = side * 0.26;
+        frontPane.castShadow = false;
+        group.add(frontPane);
+
+        const windshieldFrame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.7, 0.08), cockpitFrameMaterial);
+        windshieldFrame.position.set(4.06, 0.7, side * 0.58);
+        windshieldFrame.rotation.z = -0.18;
+        windshieldFrame.rotation.y = side * 0.18;
+        group.add(windshieldFrame);
+
+        const cockpitSideWindow = new THREE.Mesh(new THREE.BoxGeometry(1.34, 0.5, 0.065), exteriorWindshieldMaterial);
+        cockpitSideWindow.position.set(3.28, 0.64, side * 0.86);
+        cockpitSideWindow.rotation.y = side * 0.18;
+        cockpitSideWindow.rotation.z = -0.04;
+        cockpitSideWindow.castShadow = false;
+        group.add(cockpitSideWindow);
+
+        const sideWindowFrameTop = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.065, 0.08), cockpitFrameMaterial);
+        sideWindowFrameTop.position.set(3.28, 0.9, side * 0.89);
+        sideWindowFrameTop.rotation.y = side * 0.18;
+        sideWindowFrameTop.rotation.z = -0.04;
+        group.add(sideWindowFrameTop);
+
+        const sideWindowFrameBottom = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.065, 0.08), cockpitFrameMaterial);
+        sideWindowFrameBottom.position.set(3.28, 0.38, side * 0.89);
+        sideWindowFrameBottom.rotation.y = side * 0.18;
+        sideWindowFrameBottom.rotation.z = -0.04;
+        group.add(sideWindowFrameBottom);
+
+        const sideWindowDivider = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.52, 0.08), cockpitFrameMaterial);
+        sideWindowDivider.position.set(3.72, 0.64, side * 0.9);
+        sideWindowDivider.rotation.z = -0.1;
+        sideWindowDivider.rotation.y = side * 0.18;
+        group.add(sideWindowDivider);
+
+        const wiper = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.52, 0.04), cockpitFrameMaterial);
+        wiper.position.set(4.64, 0.5, side * 0.28);
+        wiper.rotation.z = side * 0.48;
+        wiper.rotation.y = side * 0.08;
+        group.add(wiper);
+
+        for (let i = 0; i < 8; i++) {
+          const passengerWindow = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.35, 0.055), darkGlassMaterial);
+          passengerWindow.position.set(2.0 - i * 0.68, 0.32, side * 1.16);
+          passengerWindow.rotation.y = side * 0.08;
+          passengerWindow.castShadow = false;
+          group.add(passengerWindow);
+        }
+      }
+
+      const cockpitInterior = new THREE.Group();
+      cockpitInterior.position.set(3.8, 0.04, 0);
+
+      const cockpitFloor = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.08, 1.46), cockpitDashMaterial);
+      cockpitFloor.position.set(-0.25, -0.38, 0);
+      cockpitFloor.castShadow = true;
+      cockpitInterior.add(cockpitFloor);
+
+      const glareshield = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.16, 1.34), cockpitDashMaterial);
+      glareshield.position.set(0.1, 0.52, 0);
+      glareshield.rotation.z = -0.1;
+      glareshield.castShadow = true;
+      cockpitInterior.add(glareshield);
+
+      const instrumentPanel = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.76, 1.3), cockpitPanelMaterial);
+      instrumentPanel.position.set(-0.06, 0.2, 0);
+      instrumentPanel.rotation.z = -0.1;
+      instrumentPanel.castShadow = true;
+      cockpitInterior.add(instrumentPanel);
+
+      const centerConsole = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.2, 0.28), cockpitDashMaterial);
+      centerConsole.position.set(-0.38, -0.2, 0);
+      centerConsole.castShadow = true;
+      cockpitInterior.add(centerConsole);
+
+      const throttleBase = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.2), cockpitFrameMaterial);
+      throttleBase.position.set(-0.18, -0.05, 0);
+      cockpitInterior.add(throttleBase);
+
+      for (const offset of [-0.045, 0.045]) {
+        const throttle = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.32, 0.035), cockpitFrameMaterial);
+        throttle.position.set(-0.16, 0.07, offset);
+        throttle.rotation.z = -0.42;
+        cockpitInterior.add(throttle);
+
+        const throttleKnob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 8), warningMaterial);
+        throttleKnob.position.set(-0.23, 0.21, offset);
+        cockpitInterior.add(throttleKnob);
+      }
+
+      for (const side of [-1, 1]) {
+        const seatBack = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.52, 0.34), cockpitSeatMaterial);
+        seatBack.position.set(-0.72, -0.08, side * 0.34);
+        seatBack.rotation.z = -0.18;
+        seatBack.castShadow = true;
+        cockpitInterior.add(seatBack);
+
+        const seatBase = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.36), cockpitSeatMaterial);
+        seatBase.position.set(-0.55, -0.32, side * 0.34);
+        seatBase.castShadow = true;
+        cockpitInterior.add(seatBase);
+
+        const yokeColumn = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.5, 12), cockpitFrameMaterial);
+        yokeColumn.position.set(0.18, -0.14, side * 0.32);
+        yokeColumn.rotation.z = -0.34;
+        cockpitInterior.add(yokeColumn);
+
+        const yokeGrip = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.018, 8, 20, Math.PI * 1.45), cockpitFrameMaterial);
+        yokeGrip.position.set(0.28, 0.04, side * 0.32);
+        yokeGrip.rotation.y = Math.PI / 2;
+        yokeGrip.rotation.z = side * 0.2;
+        cockpitInterior.add(yokeGrip);
+
+        for (const pedalOffset of [-0.07, 0.07]) {
+          const pedal = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.12), cockpitFrameMaterial);
+          pedal.position.set(0.4, -0.3, side * 0.32 + pedalOffset);
+          pedal.rotation.z = -0.28;
+          cockpitInterior.add(pedal);
+        }
+      }
+
+      const instrumentPositions = [
+        [-0.22, 0.38, -0.42],
+        [-0.22, 0.38, -0.16],
+        [-0.22, 0.38, 0.16],
+        [-0.22, 0.38, 0.42],
+        [-0.22, 0.12, -0.34],
+        [-0.22, 0.12, -0.08],
+        [-0.22, 0.12, 0.18]
+      ];
+
+      for (const [ix, iy, iz] of instrumentPositions) {
+        const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.035, 28), instrumentFaceMaterial);
+        dial.position.set(ix, iy, iz);
+        dial.rotation.z = Math.PI / 2;
+        cockpitInterior.add(dial);
+
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.102, 0.008, 8, 24), cockpitFrameMaterial);
+        ring.position.set(ix - 0.02, iy, iz);
+        ring.rotation.y = Math.PI / 2;
+        cockpitInterior.add(ring);
+
+        const needle = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.018, 0.13), instrumentNeedleMaterial);
+        needle.position.set(ix - 0.04, iy, iz);
+        needle.rotation.x = iz * 1.7 + iy;
+        cockpitInterior.add(needle);
+      }
+
+      const navigationScreen = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.23, 0.34), navScreenMaterial);
+      navigationScreen.position.set(-0.24, -0.12, 0.36);
+      cockpitInterior.add(navigationScreen);
+
+      const radarScreen = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.2, 0.28), radarMaterial);
+      radarScreen.position.set(-0.24, -0.12, -0.36);
+      cockpitInterior.add(radarScreen);
+
+      const horizonLine = new THREE.Mesh(new THREE.BoxGeometry(0.056, 0.018, 0.28), instrumentNeedleMaterial);
+      horizonLine.position.set(-0.28, -0.12, 0.36);
+      cockpitInterior.add(horizonLine);
+
+      for (let i = 0; i < 8; i++) {
+        const buttonMaterial = i % 3 === 0 ? warningMaterial : i % 2 === 0 ? greenButtonMaterial : blueButtonMaterial;
+        const button = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.028, 0.045), buttonMaterial);
+        button.position.set(-0.26, 0.58, -0.44 + i * 0.125);
+        cockpitInterior.add(button);
+      }
+
+      const overheadPanel = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.08, 0.84), cockpitDashMaterial);
+      overheadPanel.position.set(0.03, 0.84, 0);
+      overheadPanel.rotation.z = 0.12;
+      cockpitInterior.add(overheadPanel);
+
+      for (let i = 0; i < 6; i++) {
+        const switchTip = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.11, 0.025), cockpitFrameMaterial);
+        switchTip.position.set(0.03, 0.76, -0.3 + i * 0.12);
+        switchTip.rotation.z = i % 2 === 0 ? 0.36 : -0.36;
+        cockpitInterior.add(switchTip);
+      }
+
+      const cockpitLabelMaterials = new Map();
+      function getCockpitLabelMaterial(text, accent = "#77f7ff") {
+        const key = `${text}-${accent}`;
+        if (cockpitLabelMaterials.has(key)) return cockpitLabelMaterials.get(key);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = 256;
+        canvas.height = 96;
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(4, 12, 18, 0.82)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+        ctx.font = "700 26px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = accent;
+        ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        const material = new THREE.MeshBasicMaterial({
+          map: texture,
+          transparent: true,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        cockpitLabelMaterials.set(key, material);
+        return material;
+      }
+
+      function addPanelLabel(text, width, height, x, y, z, accent) {
+        const label = new THREE.Mesh(new THREE.PlaneGeometry(width, height), getCockpitLabelMaterial(text, accent));
+        label.position.set(x, y, z);
+        label.rotation.y = Math.PI / 2;
+        cockpitInterior.add(label);
+        return label;
+      }
+
+      const cockpitRoof = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.08, 1.34), cockpitDashMaterial);
+      cockpitRoof.position.set(-0.14, 0.78, 0);
+      cockpitRoof.rotation.z = -0.08;
+      cockpitRoof.castShadow = true;
+      cockpitInterior.add(cockpitRoof);
+
+      const rearBulkhead = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.94, 1.38), cockpitPanelMaterial);
+      rearBulkhead.position.set(-0.96, 0.06, 0);
+      rearBulkhead.castShadow = true;
+      cockpitInterior.add(rearBulkhead);
+
+      for (const side of [-1, 1]) {
+        const sideConsole = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.16), cockpitDashMaterial);
+        sideConsole.position.set(-0.42, -0.16, side * 0.64);
+        sideConsole.rotation.z = -0.08;
+        sideConsole.castShadow = true;
+        cockpitInterior.add(sideConsole);
+
+        const windowSill = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.08, 0.09), cockpitFrameMaterial);
+        windowSill.position.set(-0.08, 0.24, side * 0.72);
+        windowSill.castShadow = true;
+        cockpitInterior.add(windowSill);
+
+        const forwardPillar = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.72, 0.08), cockpitFrameMaterial);
+        forwardPillar.position.set(0.44, 0.46, side * 0.62);
+        forwardPillar.rotation.z = -0.18;
+        cockpitInterior.add(forwardPillar);
+
+        const aftPillar = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.76, 0.08), cockpitFrameMaterial);
+        aftPillar.position.set(-0.72, 0.38, side * 0.68);
+        aftPillar.rotation.z = 0.08;
+        cockpitInterior.add(aftPillar);
+
+        const armrest = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.13), cockpitSeatMaterial);
+        armrest.position.set(-0.56, -0.08, side * 0.48);
+        cockpitInterior.add(armrest);
+
+        const sideHandle = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.012, 8, 18, Math.PI), cockpitFrameMaterial);
+        sideHandle.position.set(-0.08, 0.18, side * 0.75);
+        sideHandle.rotation.x = Math.PI / 2;
+        sideHandle.rotation.z = side * Math.PI / 2;
+        cockpitInterior.add(sideHandle);
+
+        for (let i = 0; i < 5; i++) {
+          const breaker = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.018, 10), i % 2 === 0 ? greenButtonMaterial : blueButtonMaterial);
+          breaker.position.set(-0.16 - i * 0.105, -0.04, side * 0.64);
+          breaker.rotation.x = Math.PI / 2;
+          cockpitInterior.add(breaker);
+        }
+      }
+
+      const primaryFlightDisplay = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.26, 0.26), radarMaterial);
+      primaryFlightDisplay.position.set(-0.27, 0.2, -0.16);
+      cockpitInterior.add(primaryFlightDisplay);
+
+      const navDisplay = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.26, 0.26), navScreenMaterial);
+      navDisplay.position.set(-0.27, 0.2, 0.16);
+      cockpitInterior.add(navDisplay);
+
+      const radioStack = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.38, 0.2), cockpitDashMaterial);
+      radioStack.position.set(-0.28, 0.2, 0.48);
+      cockpitInterior.add(radioStack);
+
+      addPanelLabel("PFD", 0.18, 0.07, -0.315, 0.2, -0.16, "#79d7ff");
+      addPanelLabel("NAV", 0.18, 0.07, -0.315, 0.2, 0.16, "#62ff9a");
+      addPanelLabel("COM", 0.13, 0.055, -0.315, 0.31, 0.48, "#ffd36a");
+      addPanelLabel("XPDR", 0.13, 0.055, -0.315, 0.16, 0.48, "#ffd36a");
+      addPanelLabel("GEAR", 0.13, 0.055, -0.315, 0.01, 0.48, "#ff8a6a");
+
+      const artificialHorizonSky = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.2), new THREE.MeshStandardMaterial({ color: 0x2d8cff, emissive: 0x125cff, emissiveIntensity: 0.5 }));
+      artificialHorizonSky.position.set(-0.33, 0.245, -0.16);
+      cockpitInterior.add(artificialHorizonSky);
+
+      const artificialHorizonGround = new THREE.Mesh(new THREE.BoxGeometry(0.061, 0.08, 0.2), new THREE.MeshStandardMaterial({ color: 0x8a4d24, emissive: 0x5a2c14, emissiveIntensity: 0.38 }));
+      artificialHorizonGround.position.set(-0.331, 0.155, -0.16);
+      cockpitInterior.add(artificialHorizonGround);
+
+      const attitudeBar = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.012, 0.23), instrumentNeedleMaterial);
+      attitudeBar.position.set(-0.36, 0.2, -0.16);
+      attitudeBar.rotation.x = 0.18;
+      cockpitInterior.add(attitudeBar);
+
+      for (let i = 0; i < 4; i++) {
+        const navMark = new THREE.Mesh(new THREE.BoxGeometry(0.064, 0.01, 0.04 + i * 0.018), instrumentNeedleMaterial);
+        navMark.position.set(-0.34, 0.105 + i * 0.055, 0.16);
+        cockpitInterior.add(navMark);
+      }
+
+      for (let i = 0; i < 12; i++) {
+        const annunciatorMaterial = i < 4 ? warningMaterial : i < 8 ? greenButtonMaterial : blueButtonMaterial;
+        const annunciator = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.022, 0.055), annunciatorMaterial);
+        annunciator.position.set(-0.29, 0.51, -0.49 + i * 0.089);
+        cockpitInterior.add(annunciator);
+      }
+
+      const autopilotPanel = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.11, 0.52), cockpitFrameMaterial);
+      autopilotPanel.position.set(-0.29, 0.5, 0);
+      cockpitInterior.add(autopilotPanel);
+      addPanelLabel("AP  HDG  ALT", 0.34, 0.06, -0.33, 0.5, 0, "#bdfcff");
+
+      for (let i = 0; i < 5; i++) {
+        const rotary = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.025, 16), cockpitFrameMaterial);
+        rotary.position.set(-0.34, 0.42, -0.28 + i * 0.14);
+        rotary.rotation.z = Math.PI / 2;
+        cockpitInterior.add(rotary);
+      }
+
+      const trimWheel = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.018, 10, 24), cockpitFrameMaterial);
+      trimWheel.position.set(-0.42, -0.08, 0.22);
+      trimWheel.rotation.z = Math.PI / 2;
+      cockpitInterior.add(trimWheel);
+
+      const clipboard = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.22, 0.16), new THREE.MeshStandardMaterial({ color: 0xd7d0bd, roughness: 0.86 }));
+      clipboard.position.set(-0.52, -0.04, -0.6);
+      clipboard.rotation.z = 0.18;
+      cockpitInterior.add(clipboard);
+
+      const checklistLinesMaterial = new THREE.MeshStandardMaterial({ color: 0x1f2933, roughness: 0.7 });
+      for (let i = 0; i < 5; i++) {
+        const checklistLine = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.007, 0.1), checklistLinesMaterial);
+        checklistLine.position.set(-0.535, 0.025 - i * 0.028, -0.6);
+        cockpitInterior.add(checklistLine);
+      }
+
+      group.add(cockpitInterior);
+
+      const wing = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.18, 13.2), aircraftWhiteMaterial);
+      wing.position.set(-0.25, -0.08, 0);
+      wing.castShadow = true;
+      wing.receiveShadow = true;
+      group.add(wing);
+
+      const wingLeadingEdgeMaterial = new THREE.MeshStandardMaterial({ color: 0xd9e7f2, roughness: 0.34, metalness: 0.32 });
+      const flapMaterial = new THREE.MeshStandardMaterial({ color: 0xe8eef5, roughness: 0.48, metalness: 0.16 });
+      const redNavLightMaterial = new THREE.MeshStandardMaterial({ color: 0xff3030, emissive: 0xff1c1c, emissiveIntensity: 1.4 });
+      const greenNavLightMaterial = new THREE.MeshStandardMaterial({ color: 0x28ff74, emissive: 0x18ff62, emissiveIntensity: 1.4 });
+      const engineDarkMaterial = new THREE.MeshStandardMaterial({ color: 0x161b22, roughness: 0.52, metalness: 0.38 });
+
+      const wingLeadingEdge = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 13.35), wingLeadingEdgeMaterial);
+      wingLeadingEdge.position.set(0.25, -0.02, 0);
+      wingLeadingEdge.rotation.z = -0.03;
+      wingLeadingEdge.castShadow = true;
+      group.add(wingLeadingEdge);
+
+      for (const side of [-1, 1]) {
+        const flap = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.055, 2.45), flapMaterial);
+        flap.position.set(-0.78, -0.18, side * 2.25);
+        flap.rotation.z = 0.04;
+        flap.castShadow = true;
+        group.add(flap);
+
+        const aileron = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.052, 2.05), flapMaterial);
+        aileron.position.set(-0.83, -0.19, side * 5.15);
+        aileron.rotation.z = side * 0.015;
+        aileron.castShadow = true;
+        group.add(aileron);
+
+        const winglet = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.9, 0.32), aircraftBlueMaterial);
+        winglet.position.set(-0.25, 0.26, side * 6.72);
+        winglet.rotation.x = side * 0.28;
+        winglet.rotation.z = -0.08;
+        winglet.castShadow = true;
+        group.add(winglet);
+
+        const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.44, 0.92, 24), aircraftWhiteMaterial);
+        nacelle.position.set(0.05, -0.62, side * 2.55);
+        nacelle.rotation.z = Math.PI / 2;
+        nacelle.castShadow = true;
+        nacelle.receiveShadow = true;
+        group.add(nacelle);
+
+        const intake = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.08, 24), engineDarkMaterial);
+        intake.position.set(0.54, -0.62, side * 2.55);
+        intake.rotation.z = Math.PI / 2;
+        intake.castShadow = true;
+        group.add(intake);
+
+        const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), aircraftBlueMaterial);
+        pylon.position.set(-0.08, -0.36, side * 2.55);
+        pylon.rotation.z = -0.08;
+        pylon.castShadow = true;
+        group.add(pylon);
+
+        const navLight = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 8), side < 0 ? redNavLightMaterial : greenNavLightMaterial);
+        navLight.position.set(-0.2, 0.02, side * 6.88);
+        group.add(navLight);
+      }
+
+      const tailWing = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.14, 5.2), aircraftBlueMaterial);
+      tailWing.position.set(-4.9, 0.35, 0);
+      tailWing.castShadow = true;
+      group.add(tailWing);
+
+      for (const side of [-1, 1]) {
+        const elevator = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.055, 2.25), flapMaterial);
+        elevator.position.set(-5.35, 0.28, side * 1.45);
+        elevator.rotation.z = 0.04;
+        elevator.castShadow = true;
+        group.add(elevator);
+      }
+
+      const verticalTail = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.35, 0.2), aircraftBlueMaterial);
+      verticalTail.position.set(-5.2, 1.2, 0);
+      verticalTail.rotation.z = -0.28;
+      verticalTail.castShadow = true;
+      group.add(verticalTail);
+
+      const rudder = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.58, 0.23), flapMaterial);
+      rudder.position.set(-5.68, 1.17, 0);
+      rudder.rotation.z = -0.22;
+      rudder.castShadow = true;
+      group.add(rudder);
+
+      const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.78, metalness: 0.02 });
+      const hubMaterial = new THREE.MeshStandardMaterial({ color: 0xc8ced6, roughness: 0.34, metalness: 0.58 });
+      const gearMetalMaterial = new THREE.MeshStandardMaterial({ color: 0x4c555f, roughness: 0.38, metalness: 0.72 });
+      const hydraulicMaterial = new THREE.MeshStandardMaterial({ color: 0xdce7ef, roughness: 0.22, metalness: 0.86 });
+
+      function addLandingGearAssembly(x, y, z, mainGear = false) {
+        const gear = new THREE.Group();
+        gear.position.set(x, y, z);
+
+        const side = Math.sign(z) || 1;
+        const tireWidth = mainGear ? 0.3 : 0.24;
+        const tireRadius = mainGear ? 0.42 : 0.32;
+        const wheelOffsets = mainGear ? [-0.2, 0.2] : [0];
+        const strutHeight = mainGear ? 1.56 : 1.34;
+        const upperY = tireRadius + strutHeight;
+        const axleLength = mainGear ? 1.0 : 0.54;
+
+        const axle = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, axleLength, 14), gearMetalMaterial);
+        axle.rotation.x = Math.PI / 2;
+        axle.position.y = tireRadius;
+        axle.castShadow = true;
+        gear.add(axle);
+
+        for (const wheelOffset of wheelOffsets) {
+          const tire = new THREE.Mesh(new THREE.CylinderGeometry(tireRadius, tireRadius, tireWidth, 32), tireMaterial);
+          tire.rotation.x = Math.PI / 2;
+          tire.position.set(0, tireRadius, wheelOffset);
+          tire.castShadow = true;
+          tire.receiveShadow = true;
+          gear.add(tire);
+
+          for (const hubSide of [-1, 1]) {
+            const hub = new THREE.Mesh(new THREE.CylinderGeometry(tireRadius * 0.48, tireRadius * 0.48, 0.04, 20), hubMaterial);
+            hub.rotation.x = Math.PI / 2;
+            hub.position.set(0, tireRadius, wheelOffset + hubSide * tireWidth * 0.56);
+            hub.castShadow = true;
+            gear.add(hub);
+          }
+        }
+
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, strutHeight, 16), gearMetalMaterial);
+        strut.position.y = tireRadius + strutHeight * 0.5;
+        strut.castShadow = true;
+        gear.add(strut);
+
+        const shinyPiston = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.048, strutHeight * 0.54, 14), hydraulicMaterial);
+        shinyPiston.position.y = tireRadius + strutHeight * 0.36;
+        shinyPiston.castShadow = true;
+        gear.add(shinyPiston);
+
+        const forkSpread = mainGear ? 0.42 : 0.25;
+        for (const forkSide of [-1, 1]) {
+          const fork = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.047, 0.98, 10), gearMetalMaterial);
+          fork.position.set(0, tireRadius + 0.46, forkSide * forkSpread);
+          fork.rotation.x = forkSide * 0.1;
+          fork.castShadow = true;
+          gear.add(fork);
+        }
+
+        const door = new THREE.Mesh(new THREE.BoxGeometry(0.16, mainGear ? 1.08 : 0.82, 0.42), aircraftWhiteMaterial);
+        door.position.set(-0.28, tireRadius + 0.88, mainGear ? side * 0.5 : 0.34);
+        door.rotation.z = mainGear ? -0.1 : 0.08;
+        door.rotation.x = mainGear ? -side * 0.08 : 0;
+        door.castShadow = true;
+        gear.add(door);
+
+        if (mainGear) {
+          const upperMount = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.2, 0.86), gearMetalMaterial);
+          upperMount.position.set(0.02, upperY + 0.08, 0);
+          upperMount.castShadow = true;
+          gear.add(upperMount);
+
+          const diagonalBrace = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 1.58, 10), gearMetalMaterial);
+          diagonalBrace.position.set(0.28, tireRadius + 0.92, -side * 0.36);
+          diagonalBrace.rotation.z = 0.42;
+          diagonalBrace.rotation.x = -side * 0.26;
+          diagonalBrace.castShadow = true;
+          gear.add(diagonalBrace);
+
+          const outerCylinder = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.04, 12), hydraulicMaterial);
+          outerCylinder.position.set(-0.3, tireRadius + 0.88, side * 0.36);
+          outerCylinder.rotation.z = -0.28;
+          outerCylinder.rotation.x = side * 0.2;
+          outerCylinder.castShadow = true;
+          gear.add(outerCylinder);
+        }
+
+        group.add(gear);
+      }
+
+      addLandingGearAssembly(2.7, -1.97, 0, false);
+      addLandingGearAssembly(-1.72, -1.97, -1.98, true);
+      addLandingGearAssembly(-1.72, -1.97, 1.98, true);
+
+      const engineMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2f343a,
+        roughness: 0.46,
+        metalness: 0.42
+      });
+      const exhaustMaterial = new THREE.MeshStandardMaterial({
+        color: 0x7bd8ff,
+        emissive: 0x2aaaff,
+        emissiveIntensity: 0.75,
+        transparent: true,
+        opacity: 0.72
+      });
+      const propellerMaterial = new THREE.MeshStandardMaterial({
+        color: 0x111820,
+        roughness: 0.34,
+        metalness: 0.18
+      });
+
+      for (const side of [-1, 1]) {
+        const engine = new THREE.Group();
+        engine.position.set(0.85, -0.42, side * 3.45);
+
+        const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.58, 1.35, 24), engineMaterial);
+        nacelle.rotation.z = Math.PI / 2;
+        nacelle.castShadow = true;
+        nacelle.receiveShadow = true;
+        engine.add(nacelle);
+
+        const intake = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 24), glassMaterial);
+        intake.rotation.z = Math.PI / 2;
+        intake.position.x = 0.72;
+        engine.add(intake);
+
+        const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.42, 18), aircraftBlueMaterial);
+        spinner.rotation.z = -Math.PI / 2;
+        spinner.position.x = 1.08;
+        spinner.castShadow = true;
+        engine.add(spinner);
+
+        const engineStrut = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.72, 0.18), aircraftBlueMaterial);
+        engineStrut.position.set(-0.05, 0.44, 0);
+        engineStrut.castShadow = true;
+        engine.add(engineStrut);
+
+        const exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.55, 18, 1, true), exhaustMaterial);
+        exhaust.rotation.z = -Math.PI / 2;
+        exhaust.position.x = -0.95;
+        exhaust.scale.set(1, 0.55, 0.55);
+        exhaust.userData.animation = "engineGlow";
+        exhaust.userData.phase = side;
+        animatedObjects.push(exhaust);
+        engine.add(exhaust);
+
+        const propeller = new THREE.Group();
+        propeller.position.x = 1.22;
+
+        const bladeA = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.75, 0.2), propellerMaterial);
+        const bladeB = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.2, 1.75), propellerMaterial);
+        bladeA.castShadow = true;
+        bladeB.castShadow = true;
+        propeller.add(bladeA);
+        propeller.add(bladeB);
+
+        propeller.userData.side = side;
+        propeller.userData.keepVisible = true;
+        engine.userData.keepVisible = true;
+        propellers.push(propeller);
+        engine.add(propeller);
+        group.add(engine);
+      }
+
+      const beacon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.26, 16, 10),
+        new THREE.MeshStandardMaterial({ color: 0xffdd55, emissive: 0xffaa00, emissiveIntensity: 1.15 })
+      );
+      beacon.position.set(0.4, 1.34, 0);
+      beacon.castShadow = false;
+      beacon.userData.animation = "pulse";
+      beacon.userData.phase = 0.4;
+      animatedObjects.push(beacon);
+      group.add(beacon);
+
+      scene.add(group);
+      sceneryObjects.push(group);
+      aircraft.group = group;
+    }
+
+    function addWindsock(x, z) {
+      const y = terrainHeight(x, z);
+      const group = new THREE.Group();
+      group.position.set(x, y, z);
+
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 5.6, 10), roofMaterial);
+      pole.position.y = 2.8;
+      pole.castShadow = true;
+      group.add(pole);
+
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.08, 0.08), roofMaterial);
+      arm.position.set(1.35, 5.2, 0);
+      arm.castShadow = true;
+      group.add(arm);
+
+      const sock = new THREE.Mesh(
+        new THREE.ConeGeometry(0.55, 2.5, 18, 1, true),
+        new THREE.MeshStandardMaterial({ color: 0xff5a3d, roughness: 0.7, metalness: 0.02, side: THREE.DoubleSide })
+      );
+      sock.rotation.z = -Math.PI / 2;
+      sock.position.set(2.85, 5.2, 0);
+      sock.scale.set(1, 0.65, 0.65);
+      sock.castShadow = true;
+      sock.userData.animation = "windsock";
+      sock.userData.phase = Math.random() * Math.PI * 2;
+      animatedObjects.push(sock);
+      group.add(sock);
+
+      scene.add(group);
+      sceneryObjects.push(group);
+      addCylinderCollider(x, z, 0.45, 5.6, y, "biruta");
+    }
+
+    function addGaleaoTerminalComplex() {
+      const terminalX = -132;
+      const terminalZ = -72;
+      const terminalY = terrainHeight(terminalX, terminalZ);
+      const facadeMaterial = glassMaterial.clone();
+      facadeMaterial.color.set(0x94cbed);
+      facadeMaterial.opacity = 0.58;
+
+      addBoxObject(126, 11, 30, terminalX, terminalZ, concreteMaterial, "terminal internacional");
+
+      const terminalRoof = new THREE.Mesh(new THREE.BoxGeometry(132, 2.8, 36), roofMaterial);
+      terminalRoof.position.set(terminalX, terminalY + 12.2, terminalZ);
+      terminalRoof.castShadow = true;
+      terminalRoof.receiveShadow = true;
+      scene.add(terminalRoof);
+
+      const facade = new THREE.Mesh(new THREE.PlaneGeometry(116, 7.4), facadeMaterial);
+      facade.position.set(terminalX, terminalY + 6.7, terminalZ + 15.12);
+      facade.rotation.y = Math.PI;
+      scene.add(facade);
+
+      const roofRibsMaterial = new THREE.MeshStandardMaterial({ color: 0xd3d9dd, roughness: 0.32, metalness: 0.58 });
+      for (let x = -188; x <= -76; x += 16) {
+        const rib = new THREE.Mesh(new THREE.BoxGeometry(1.1, 4.2, 38), roofRibsMaterial);
+        rib.position.set(x, terminalY + 12.6, terminalZ);
+        rib.castShadow = true;
+        scene.add(rib);
+      }
+
+      const jetwayMaterial = new THREE.MeshStandardMaterial({ color: 0xc7ced3, roughness: 0.56, metalness: 0.2 });
+      const gateMaterial = new THREE.MeshStandardMaterial({ color: 0x375568, roughness: 0.42, metalness: 0.24 });
+      for (let index = 0; index < 6; index++) {
+        const gateX = -180 + index * 19;
+        const bridge = new THREE.Mesh(new THREE.BoxGeometry(7.2, 3.1, 25), jetwayMaterial);
+        bridge.position.set(gateX, terminalY + 5.2, -44);
+        bridge.castShadow = true;
+        bridge.receiveShadow = true;
+        scene.add(bridge);
+
+        const gate = new THREE.Mesh(new THREE.BoxGeometry(10, 0.15, 14), gateMaterial);
+        gate.position.set(gateX, terrainHeight(gateX, -27) + 0.11, -27);
+        gate.receiveShadow = true;
+        scene.add(gate);
+      }
+
+      addBoxObject(62, 10, 28, -144, 140, hangarMaterial, "terminal de cargas");
+      addBoxObject(44, 8, 24, -196, 142, hangarMaterial, "hangar de manutencao");
+      addBoxObject(72, 5, 22, -152, -156, concreteMaterial, "estacionamento terminal");
+      addAirportSign("RIOGALEAO | GIG", -132, -42, "#e7f6ff", 1.45);
+      addAirportSign("TERMINAL INTERNACIONAL", -132, -112, "#ffe36c", 0.92);
+      addAirportSign("CARGAS", -144, 112, "#d8ff9b", 0.85);
+    }
+
+    function addAirportBuildings() {
+      addGaleaoTerminalComplex();
+      addBoxObject(22, 7, 18, -48, -30, hangarMaterial, "hangar");
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(24, 3, 20), roofMaterial);
+      roof.position.set(-48, terrainHeight(-48, -30) + 8.6, -30);
+      roof.rotation.z = 0.08;
+      roof.castShadow = true;
+      roof.receiveShadow = true;
+      scene.add(roof);
+
+      addBoxObject(18, 5, 13, 48, 18, concreteMaterial, "terminal");
+
+      const towerBase = addBoxObject(7, 14, 7, 66, -18, concreteMaterial, "torre");
+      towerBase.material = concreteMaterial;
+
+      const towerCabinGroup = new THREE.Group();
+      towerCabinGroup.position.set(66, terrainHeight(66, -18) + 16.2, -18);
+
+      const towerWindowMaterial = glassMaterial.clone();
+      towerWindowMaterial.opacity = 0.42;
+      towerWindowMaterial.transparent = true;
+      towerWindowMaterial.depthWrite = false;
+      towerWindowMaterial.side = THREE.DoubleSide;
+
+      const towerFrameMaterial = concreteMaterial;
+      const towerFramePieces = [
+        { size: [10.4, 0.36, 10.4], position: [0, -2.1, 0] },
+        { size: [10.4, 0.34, 10.4], position: [0, 2.08, 0] },
+        { size: [0.36, 4.1, 0.36], position: [-5.15, 0, -5.15] },
+        { size: [0.36, 4.1, 0.36], position: [5.15, 0, -5.15] },
+        { size: [0.36, 4.1, 0.36], position: [-5.15, 0, 5.15] },
+        { size: [0.36, 4.1, 0.36], position: [5.15, 0, 5.15] }
+      ];
+
+      for (const frameSpec of towerFramePieces) {
+        const framePiece = new THREE.Mesh(new THREE.BoxGeometry(...frameSpec.size), towerFrameMaterial);
+        framePiece.position.set(...frameSpec.position);
+        framePiece.castShadow = true;
+        framePiece.receiveShadow = true;
+        towerCabinGroup.add(framePiece);
+      }
+
+      const towerWindows = [
+        { position: [0, 0.08, 5.18], rotationY: 0, size: [8.4, 2.35] },
+        { position: [0, 0.08, -5.18], rotationY: Math.PI, size: [8.4, 2.35] },
+        { position: [5.18, 0.08, 0], rotationY: Math.PI / 2, size: [8.4, 2.35] },
+        { position: [-5.18, 0.08, 0], rotationY: -Math.PI / 2, size: [8.4, 2.35] }
+      ];
+
+      for (const windowSpec of towerWindows) {
+        const pane = new THREE.Mesh(new THREE.PlaneGeometry(...windowSpec.size), towerWindowMaterial);
+        pane.position.set(...windowSpec.position);
+        pane.rotation.y = windowSpec.rotationY;
+        pane.castShadow = false;
+        pane.receiveShadow = true;
+        towerCabinGroup.add(pane);
+      }
+
+      const towerCabinRoof = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.45, 10.8), roofMaterial);
+      towerCabinRoof.position.y = 2.42;
+      towerCabinRoof.castShadow = true;
+      towerCabinRoof.receiveShadow = true;
+      towerCabinGroup.add(towerCabinRoof);
+
+      scene.add(towerCabinGroup);
+
+      const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 5.5, 8), roofMaterial);
+      antenna.position.set(66, terrainHeight(66, -18) + 20.8, -18);
+      antenna.castShadow = true;
+      scene.add(antenna);
+
+      const towerBeacon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 16, 10),
+        new THREE.MeshStandardMaterial({ color: 0xffee88, emissive: 0xffaa22, emissiveIntensity: 1.35 })
+      );
+      towerBeacon.position.set(66, terrainHeight(66, -18) + 23.85, -18);
+      towerBeacon.userData.animation = "pulse";
+      towerBeacon.userData.phase = 1.7;
+      animatedObjects.push(towerBeacon);
+      scene.add(towerBeacon);
+
+      addWindsock(36, 42);
+    }
+
+    function addAirportSign(text, x, z, color = "#fff4a0", size = 1) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 128;
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 8;
+      ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+      ctx.fillStyle = color;
+      ctx.font = "bold 46px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(10 * size, 2.5 * size), material);
+      sign.position.set(x, terrainHeight(x, z) + 5.2 * size, z);
+      sign.rotation.y = Math.PI;
+      scene.add(sign);
+      return sign;
+    }
+
+    function addAirportScene() {
+      addRunway();
+      addAirplane();
+      addAirportBuildings();
+      addAutonomousTraffic();
+      addAirportSign("PISTA", 0, 38, "#ffffff", 1.15);
+      addAirportSign("AVIÃO PRONTO", AIRCRAFT_START_X, AIRCRAFT_START_Z + 20, "#ffe26a", 1.05);
+
+      addAirportSign("AEROPORTO", 0, 62, "#d8ff9b", 1.35);
+    }
+
+    function createTrafficAircraft(color) {
+      const group = new THREE.Group();
+      group.name = "trafego-aereo-autonomo";
+      const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xf1f5f7, roughness: 0.44, metalness: 0.16 });
+      const accentMaterial = new THREE.MeshStandardMaterial({ color, roughness: 0.42, metalness: 0.2 });
+      const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x183240, roughness: 0.22, metalness: 0.16 });
+
+      const fuselage = new THREE.Mesh(new THREE.CapsuleGeometry(1.35, 11.2, 8, 18), bodyMaterial);
+      fuselage.rotation.z = Math.PI / 2;
+      fuselage.position.y = 3.35;
+      fuselage.castShadow = true;
+      group.add(fuselage);
+
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(1.28, 2.6, 18), bodyMaterial);
+      nose.rotation.z = -Math.PI / 2;
+      nose.position.set(6.85, 3.35, 0);
+      group.add(nose);
+
+      const wings = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.22, 16), bodyMaterial);
+      wings.position.set(-0.45, 3.2, 0);
+      wings.castShadow = true;
+      group.add(wings);
+
+      const tailWing = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.15, 6.4), accentMaterial);
+      tailWing.position.set(-5.8, 4.05, 0);
+      group.add(tailWing);
+
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(2.1, 3.1, 0.22), accentMaterial);
+      fin.position.set(-5.9, 5.25, 0);
+      fin.rotation.z = -0.16;
+      group.add(fin);
+
+      for (const side of [-1, 1]) {
+        const engine = new THREE.Mesh(new THREE.CylinderGeometry(0.76, 0.9, 2.3, 16), darkMaterial);
+        engine.rotation.z = Math.PI / 2;
+        engine.position.set(0.72, 2.55, side * 5.05);
+        engine.castShadow = true;
+        group.add(engine);
+      }
+
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshStandardMaterial({ color: 0xff563d, emissive: 0xff2200, emissiveIntensity: 1.8 }));
+      beacon.position.set(0, 4.78, 0);
+      group.add(beacon);
+      group.userData.beacon = beacon;
+      group.visible = false;
+      group.scale.setScalar(1.45);
+      scene.add(group);
+      return group;
+    }
+
+    function createTrafficBeacon() {
+      const beacon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.16, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0xff563d, emissive: 0xff2200, emissiveIntensity: 1.8 })
+      );
+      beacon.position.set(0, 3.2, 0);
+      return beacon;
+    }
+
+    function applyDetailedModelToAutonomousTraffic() {
+      if (!detailedAircraftTemplate) return;
+
+      for (const traffic of trafficAircraft) {
+        const group = traffic.group;
+        group.clear();
+
+        const detailedTrafficModel = detailedAircraftTemplate.clone(true);
+        detailedTrafficModel.name = "modelo-real-do-trafego-aereo";
+        group.add(detailedTrafficModel);
+        group.add(createLandingGearAssembly());
+
+        const beacon = createTrafficBeacon();
+        group.add(beacon);
+        group.userData.beacon = beacon;
+        group.scale.setScalar(1.35);
+      }
+    }
+
+    function addAutonomousTraffic() {
+      trafficAircraft.push(
+        { group: createTrafficAircraft(0x0f6bb8), operation: "arrival", runwayX: 96, phase: 0 },
+        { group: createTrafficAircraft(0xd3322d), operation: "departure", runwayX: 0, phase: 32 },
+        { group: createTrafficAircraft(0x0d9b76), operation: "arrival", runwayX: 0, phase: 55 }
+      );
+      applyDetailedModelToAutonomousTraffic();
+    }
+
+    function updateAutonomousTraffic(elapsed) {
+      for (const traffic of trafficAircraft) {
+        const cycle = (elapsed + traffic.phase) % 88;
+        const group = traffic.group;
+        const runwayX = traffic.runwayX;
+        let x = runwayX;
+        let z = 0;
+        let clearance = 0;
+        let yaw = -Math.PI / 2;
+        let pitch = 0;
+        let visible = true;
+
+        if (traffic.operation === "arrival") {
+          if (cycle < 34) {
+            const progress = cycle / 34;
+            z = -790 + 520 * progress;
+            clearance = 96 - 64 * progress;
+            pitch = -0.08;
+          } else if (cycle < 49) {
+            const progress = (cycle - 34) / 15;
+            z = -270 + 250 * progress;
+            clearance = 32 * (1 - progress);
+            pitch = -0.11;
+          } else if (cycle < 66) {
+            const progress = (cycle - 49) / 17;
+            z = -20 + 285 * progress;
+            // Após o toque, permanece alinhado ao eixo da pista até sair de cena.
+            yaw = -Math.PI / 2;
+          } else {
+            visible = false;
+          }
+        } else if (cycle < 14) {
+          const progress = cycle / 14;
+          x = 42 - 42 * progress;
+          z = 410;
+          yaw = Math.PI;
+        } else if (cycle < 35) {
+          const progress = (cycle - 14) / 21;
+          z = 430 - 980 * progress;
+          yaw = Math.PI / 2;
+        } else if (cycle < 57) {
+          const progress = (cycle - 35) / 22;
+          z = -550 - 610 * progress;
+          clearance = 118 * progress;
+          yaw = Math.PI / 2;
+          pitch = 0.13;
+        } else {
+          visible = false;
+        }
+
+        group.visible = visible;
+        if (!visible) continue;
+        const groundClearance = clearance > 0 ? clearance : TRAFFIC_AIRCRAFT_GROUND_CLEARANCE;
+        group.position.set(x, terrainHeight(x, z) + groundClearance, z);
+        group.rotation.set(0, yaw, pitch, "YXZ");
+        if (group.userData.beacon) {
+          group.userData.beacon.visible = Math.sin(elapsed * 8 + traffic.phase) > -0.15;
+        }
+      }
+    }
+
+    function seededRandom(seed) {
+      const value = Math.sin(seed * 127.1) * 43758.5453123;
+      return value - Math.floor(value);
+    }
+
+    function addTreeToGroup(x, z, scale, parent) {
+      const before = scene.children.length;
+      addTree(x, z, scale);
+      const tree = scene.children[scene.children.length - 1];
+      if (tree && scene.children.length > before) {
+        scene.remove(tree);
+        parent.add(tree);
+      }
+    }
+
+    function addRockToGroup(x, z, scale, parent) {
+      const before = scene.children.length;
+      addRock(x, z, scale);
+      const rock = scene.children[scene.children.length - 1];
+      if (rock && scene.children.length > before) {
+        scene.remove(rock);
+        parent.add(rock);
+      }
+    }
+
+    function createCityGroundPatch(width, length, centerX, centerZ, material, parent, yOffset = 0.095, segmentsX = 4, segmentsZ = 4) {
+      const geometry = new THREE.PlaneGeometry(width, length, segmentsX, segmentsZ);
+      geometry.rotateX(-Math.PI / 2);
+
+      const positions = geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const worldX = centerX + positions.getX(i);
+        const worldZ = centerZ + positions.getZ(i);
+        positions.setY(i, terrainHeight(worldX, worldZ) + yOffset);
+      }
+
+      geometry.computeVertexNormals();
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(centerX, 0, centerZ);
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      return mesh;
+    }
+
+    function addCityBox(width, height, depth, x, z, material, parent, label, yOffset = 0) {
+      const y = terrainHeight(x, z);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+      mesh.position.set(x, y + height / 2 + yOffset, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      parent.add(mesh);
+      addCylinderCollider(x, z, Math.max(width, depth) * 0.56, height + yOffset, y, label);
+      return mesh;
+    }
+
+    function addBuildingWindows(building, width, height, depth, parent) {
+      const rows = Math.min(7, Math.max(2, Math.floor(height / 4.2)));
+      const columns = Math.min(5, Math.max(2, Math.floor(width / 3.4)));
+      const frontZ = building.position.z + depth / 2 + 0.035;
+      const backZ = building.position.z - depth / 2 - 0.035;
+
+      for (let row = 0; row < rows; row++) {
+        for (let column = 0; column < columns; column++) {
+          if ((row + column) % 5 === 0) continue;
+
+          const windowWidth = 0.78;
+          const windowHeight = 0.94;
+          const x = building.position.x - width * 0.38 + column * (width * 0.76 / Math.max(1, columns - 1));
+          const y = building.position.y - height / 2 + 2.2 + row * ((height - 3.2) / Math.max(1, rows - 1));
+
+          const frontWindow = new THREE.Mesh(new THREE.PlaneGeometry(windowWidth, windowHeight), cityWindowMaterial);
+          frontWindow.position.set(x, y, frontZ);
+          parent.add(frontWindow);
+
+          const backWindow = frontWindow.clone();
+          backWindow.position.z = backZ;
+          backWindow.rotation.y = Math.PI;
+          parent.add(backWindow);
+        }
+      }
+    }
+
+    function addCityBuilding(x, z, width, depth, height, parent, seed) {
+      const material = buildingMaterials[Math.floor(seededRandom(seed) * buildingMaterials.length)];
+      const building = addCityBox(width, height, depth, x, z, material, parent, "prédio");
+      addBuildingWindows(building, width, height, depth, parent);
+
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(width * 0.92, 0.38, depth * 0.92), roofMaterial);
+      roof.position.set(x, building.position.y + height / 2 + 0.22, z);
+      roof.castShadow = true;
+      roof.receiveShadow = true;
+      parent.add(roof);
+      return building;
+    }
+
+    function addHouse(x, z, parent, seed) {
+      const width = 7.2 + seededRandom(seed + 1) * 2.2;
+      const depth = 6.4 + seededRandom(seed + 2) * 2;
+      const height = 3.8 + seededRandom(seed + 3) * 1.4;
+      const wallMaterial = houseWallMaterials[Math.floor(seededRandom(seed + 4) * houseWallMaterials.length)];
+      const roofMat = houseRoofMaterials[Math.floor(seededRandom(seed + 5) * houseRoofMaterials.length)];
+      const house = addCityBox(width, height, depth, x, z, wallMaterial, parent, "casa");
+
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(width, depth) * 0.72, 2.2, 4), roofMat);
+      roof.position.set(x, house.position.y + height / 2 + 1.05, z);
+      roof.rotation.y = Math.PI / 4;
+      roof.castShadow = true;
+      roof.receiveShadow = true;
+      parent.add(roof);
+
+      const door = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 2.1), new THREE.MeshStandardMaterial({ color: 0x4a2d1e, roughness: 0.68 }));
+      door.position.set(x, terrainHeight(x, z) + 1.12, z + depth / 2 + 0.045);
+      parent.add(door);
+
+      for (const side of [-1, 1]) {
+        const window = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 0.9), cityWindowMaterial);
+        window.position.set(x + side * width * 0.28, terrainHeight(x, z) + height * 0.56, z + depth / 2 + 0.05);
+        parent.add(window);
+      }
+    }
+
+    function addStreetLight(x, z, parent) {
+      const y = terrainHeight(x, z);
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 5.4, 10), poleMaterial);
+      pole.position.set(x, y + 2.7, z);
+      pole.castShadow = true;
+      parent.add(pole);
+
+      const lampArm = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.09, 0.09), poleMaterial);
+      lampArm.position.set(x + 0.55, y + 5.18, z);
+      lampArm.castShadow = true;
+      parent.add(lampArm);
+
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 8), streetLightMaterial);
+      lamp.position.set(x + 1.18, y + 5.1, z);
+      parent.add(lamp);
+    }
+
+    function addCar(x, z, parent, seed, rotationY = 0) {
+      const car = new THREE.Group();
+      car.position.set(x, terrainHeight(x, z) + 0.42, z);
+      car.rotation.y = rotationY;
+
+      const bodyMaterial = carMaterials[Math.floor(seededRandom(seed) * carMaterials.length)];
+      const body = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.78, 1.65), bodyMaterial);
+      body.position.y = 0.38;
+      body.castShadow = true;
+      body.receiveShadow = true;
+      car.add(body);
+
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.72, 1.28), darkGlassMaterial);
+      cabin.position.set(0.2, 0.98, 0);
+      cabin.castShadow = true;
+      car.add(cabin);
+
+      const tireMaterial = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.72 });
+      for (const sideX of [-1.05, 1.05]) {
+        for (const sideZ of [-0.88, 0.88]) {
+          const tire = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.24, 16), tireMaterial);
+          tire.position.set(sideX, 0.08, sideZ);
+          tire.rotation.x = Math.PI / 2;
+          tire.castShadow = true;
+          car.add(tire);
+        }
+      }
+
+      parent.add(car);
+      addCylinderCollider(x, z, 2.1, 1.5, terrainHeight(x, z), "carro");
+      return car;
+    }
+
+    function addCityBlock(baseX, baseZ, parent, seed, dense) {
+      const offsetX = (seededRandom(seed + 11) - 0.5) * 18;
+      const offsetZ = (seededRandom(seed + 12) - 0.5) * 18;
+      const x = baseX + offsetX;
+      const z = baseZ + offsetZ;
+
+      const objectRadius = dense ? 8 : 6;
+      if (!canPlaceUrbanObject(x, z, objectRadius)) return 0;
+
+      if (dense) {
+        const width = 8 + seededRandom(seed + 21) * 8;
+        const depth = 8 + seededRandom(seed + 22) * 7;
+        const height = 16 + seededRandom(seed + 23) * 34;
+        addCityBuilding(x, z, width, depth, height, parent, seed + 30);
+        return 1;
+      }
+
+      addHouse(x, z, parent, seed + 40);
+      return 1;
+    }
+
+    function generateCityDistrict(cellX, cellZ, cellGroup, seed) {
+      const districtInfo = getCityDistrictInfo(cellX, cellZ);
+      const baseX = districtInfo.baseX;
+      const baseZ = districtInfo.baseZ;
+      const urbanNoise = districtInfo.urbanNoise;
+
+      if (!districtInfo.shouldCreateCity) return 0;
+
+      const dense = urbanNoise > 0.78;
+      let cityObjects = 0;
+
+      const roadWidth = 58;
+      const roadLength = WORLD_CELL_SIZE * 1.42;
+      const laneLineLength = WORLD_CELL_SIZE * 1.26;
+      const sidewalkWidth = 10;
+      const sidewalkOffset = roadWidth * 0.5 + sidewalkWidth * 0.5 + 1.8;
+
+      createCityGroundPatch(roadWidth, roadLength, baseX, baseZ, cityRoadMaterial, cellGroup, 0.045, 6, 18);
+      createCityGroundPatch(roadLength, roadWidth, baseX, baseZ, cityRoadMaterial, cellGroup, 0.05, 18, 6);
+      createCityGroundPatch(roadWidth + 13, roadWidth + 13, baseX, baseZ, cityRoadMaterial, cellGroup, 0.055, 8, 8);
+      createCityGroundPatch(2.8, laneLineLength, baseX, baseZ, cityRoadLineMaterial, cellGroup, 0.07, 1, 18);
+      createCityGroundPatch(laneLineLength, 2.8, baseX, baseZ, cityRoadLineMaterial, cellGroup, 0.075, 18, 1);
+
+      for (const side of [-1, 1]) {
+        createCityGroundPatch(sidewalkWidth, roadLength, baseX + side * sidewalkOffset, baseZ, sidewalkMaterial, cellGroup, 0.065, 4, 18);
+        createCityGroundPatch(roadLength, sidewalkWidth, baseX, baseZ + side * sidewalkOffset, sidewalkMaterial, cellGroup, 0.07, 18, 4);
+      }
+
+      const blockOffsets = dense ? [-86, 86] : [-84, 84];
+      for (let ix = 0; ix < blockOffsets.length; ix++) {
+        for (let iz = 0; iz < blockOffsets.length; iz++) {
+          const blockX = baseX + blockOffsets[ix];
+          const blockZ = baseZ + blockOffsets[iz];
+          cityObjects += addCityBlock(blockX, blockZ, cellGroup, seed + ix * 89 + iz * 131, dense);
+        }
+      }
+
+      for (let i = -1; i <= 1; i++) {
+        addStreetLight(baseX + 15, baseZ + i * 34, cellGroup);
+        addStreetLight(baseX + i * 34, baseZ - 15, cellGroup);
+        cityObjects += 2;
+      }
+
+      for (let i = 0; i < 3; i++) {
+        const along = -54 + i * 27 + seededRandom(seed + i * 17) * 8;
+        if (seededRandom(seed + i * 23) > 0.5) {
+          addCar(baseX + 5.2, baseZ + along, cellGroup, seed + i * 41, Math.PI);
+        } else {
+          addCar(baseX + along, baseZ - 5.2, cellGroup, seed + i * 41, Math.PI / 2);
+        }
+        cityObjects += 1;
+      }
+
+      return cityObjects;
+    }
+
+    function isCellInsideStaticTerrain(cellX, cellZ) {
+      const baseX = cellX * WORLD_CELL_SIZE;
+      const baseZ = cellZ * WORLD_CELL_SIZE;
+      const cellHalf = WORLD_CELL_SIZE / 2;
+      const safeHalf = WORLD_HALF - cellHalf;
+
+      return Math.abs(baseX) <= safeHalf && Math.abs(baseZ) <= safeHalf;
+    }
+
+    function generateTerrainCell(cellX, cellZ) {
+      if (isCellInsideStaticTerrain(cellX, cellZ)) return;
+
+      const key = `${cellX},${cellZ}`;
+      if (generatedTerrainCells.has(key)) return;
+      generatedTerrainCells.add(key);
+
+      const baseX = cellX * WORLD_CELL_SIZE;
+      const baseZ = cellZ * WORLD_CELL_SIZE;
+      const geometry = new THREE.PlaneGeometry(WORLD_CELL_SIZE, WORLD_CELL_SIZE, TERRAIN_CELL_SEGMENTS, TERRAIN_CELL_SEGMENTS);
+      geometry.rotateX(-Math.PI / 2);
+
+      const positions = geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const x = baseX + positions.getX(i);
+        const z = baseZ + positions.getZ(i);
+        positions.setY(i, terrainHeight(x, z));
+      }
+
+      geometry.computeVertexNormals();
+
+      const terrainCell = new THREE.Mesh(geometry, terrainMaterial);
+      terrainCell.position.set(baseX, 0, baseZ);
+      terrainCell.receiveShadow = true;
+      terrainCell.name = `terreno-dinamico-${key}`;
+      dynamicTerrainGroup.add(terrainCell);
+      activeTerrainCells.set(key, terrainCell);
+      dynamicWorldStats.terrainCells += 1;
+    }
+
+    function generateWorldCell(cellX, cellZ) {
+      const key = `${cellX},${cellZ}`;
+      if (generatedWorldCells.has(key)) return;
+      generatedWorldCells.add(key);
+
+      const baseX = cellX * WORLD_CELL_SIZE;
+      const baseZ = cellZ * WORLD_CELL_SIZE;
+      const seed = cellX * 92821 + cellZ * 68917;
+      const cellGroup = new THREE.Group();
+      cellGroup.name = `mundo-dinamico-${key}`;
+      dynamicWorldGroup.add(cellGroup);
+      activeWorldCells.set(key, cellGroup);
+
+      dynamicWorldStats.cells += 1;
+
+      let addedObjects = generateCityDistrict(cellX, cellZ, cellGroup, seed);
+
+      if (addedObjects === 0 && isGreenReserveCell(cellX, cellZ) && !isUrbanBufferCell(cellX, cellZ)) {
+        const objectCount = 2 + Math.floor(seededRandom(seed + 1) * 3);
+        for (let i = 0; i < objectCount; i++) {
+          const randomA = seededRandom(seed + i * 13.37);
+          const randomB = seededRandom(seed + i * 41.91);
+          const randomC = seededRandom(seed + i * 73.11);
+          const x = baseX + (randomA - 0.5) * WORLD_CELL_SIZE;
+          const z = baseZ + (randomB - 0.5) * WORLD_CELL_SIZE;
+
+          if (!canPlaceObject(x, z, 2.7)) continue;
+
+          if (randomC > 0.54) {
+            addTreeToGroup(x, z, 0.68 + randomC * 0.62, cellGroup);
+          } else {
+            addRockToGroup(x, z, 0.55 + randomC * 1.1, cellGroup);
+          }
+
+          addedObjects += 1;
+        }
+      } else {
+        for (let i = 0; i < 3; i++) {
+          const randomA = seededRandom(seed + i * 19.17);
+          const randomB = seededRandom(seed + i * 31.41);
+          const x = baseX + (randomA - 0.5) * WORLD_CELL_SIZE;
+          const z = baseZ + (randomB - 0.5) * WORLD_CELL_SIZE;
+
+          if (Math.abs(x - baseX) < 62 && Math.abs(z - baseZ) < 62) continue;
+          if (!canPlaceObject(x, z, 2.4)) continue;
+
+          addTreeToGroup(x, z, 0.58 + seededRandom(seed + i * 8.5) * 0.44, cellGroup);
+          addedObjects += 1;
+        }
+      }
+
+      cellGroup.userData.objectCount = addedObjects;
+      dynamicWorldStats.objects += addedObjects;
+    }
+
+    const DYNAMIC_COLLIDER_LABELS = new Set(["árvore", "arvore", "rocha", "pedra", "prédio", "predio", "casa", "carro"]);
+
+    function disposeObject3D(object) {
+      object.traverse((child) => {
+        if (child.geometry && child.geometry !== sharedTreeTrunkGeometry && child.geometry !== sharedLeafClusterGeometry) {
+          child.geometry.dispose();
+        }
+      });
+    }
+
+    function pruneDynamicColliders(centerCellX, centerCellZ, keepRadius) {
+      const centerX = centerCellX * WORLD_CELL_SIZE;
+      const centerZ = centerCellZ * WORLD_CELL_SIZE;
+      const keepDistance = (keepRadius + 0.9) * WORLD_CELL_SIZE;
+      const keepDistanceSq = keepDistance * keepDistance;
+
+      for (let i = solidColliders.length - 1; i >= 0; i--) {
+        const collider = solidColliders[i];
+        if (!DYNAMIC_COLLIDER_LABELS.has(collider.label)) continue;
+
+        const dx = collider.x - centerX;
+        const dz = collider.z - centerZ;
+        if (dx * dx + dz * dz > keepDistanceSq) {
+          solidColliders.splice(i, 1);
+        }
+      }
+    }
+
+    function enqueueCell(queue, pendingCells, cellX, cellZ) {
+      const key = `${cellX},${cellZ}`;
+      if (pendingCells.has(key)) return;
+      pendingCells.add(key);
+      queue.push({ cellX, cellZ, key });
+    }
+
+    function sortGenerationQueue(queue, centerCellX, centerCellZ) {
+      queue.sort((first, second) => {
+        const firstDistance = (first.cellX - centerCellX) ** 2 + (first.cellZ - centerCellZ) ** 2;
+        const secondDistance = (second.cellX - centerCellX) ** 2 + (second.cellZ - centerCellZ) ** 2;
+        return firstDistance - secondDistance;
+      });
+    }
+
+    function processDynamicGeneration() {
+      const startedAt = performance.now();
+
+      while (terrainGenerationQueue.length > 0 && performance.now() - startedAt < WORLD_GENERATION_BUDGET_MS) {
+        const cell = terrainGenerationQueue.shift();
+        pendingTerrainCells.delete(cell.key);
+        generateTerrainCell(cell.cellX, cell.cellZ);
+      }
+
+      if (worldGenerationQueue.length > 0 && performance.now() - startedAt < WORLD_GENERATION_BUDGET_MS) {
+        const cell = worldGenerationQueue.shift();
+        pendingWorldCells.delete(cell.key);
+        generateWorldCell(cell.cellX, cell.cellZ);
+      }
+    }
+
+    let lastDynamicCenterKey = "";
+
+    function updateDynamicWorld(force = false) {
+      const focus = aircraft.pilotMode ? aircraft.position : player.position;
+      const centerCellX = Math.floor(focus.x / WORLD_CELL_SIZE);
+      const centerCellZ = Math.floor(focus.z / WORLD_CELL_SIZE);
+      const centerKey = `${centerCellX},${centerCellZ}`;
+
+      if (!force && centerKey === lastDynamicCenterKey) return;
+      lastDynamicCenterKey = centerKey;
+
+      const sceneryRadius = aircraft.pilotMode ? 4 : 3;
+      const terrainRadius = sceneryRadius + 2;
+      const sceneryKeepRadius = sceneryRadius + 1;
+      const terrainKeepRadius = terrainRadius + 1;
+
+      terrainGenerationQueue.length = 0;
+      worldGenerationQueue.length = 0;
+      pendingTerrainCells.clear();
+      pendingWorldCells.clear();
+
+      for (let x = centerCellX - terrainRadius; x <= centerCellX + terrainRadius; x++) {
+        for (let z = centerCellZ - terrainRadius; z <= centerCellZ + terrainRadius; z++) {
+          const key = `${x},${z}`;
+          if (!generatedTerrainCells.has(key) && !isCellInsideStaticTerrain(x, z)) {
+            enqueueCell(terrainGenerationQueue, pendingTerrainCells, x, z);
+          }
+          if (Math.abs(x - centerCellX) <= sceneryRadius && Math.abs(z - centerCellZ) <= sceneryRadius && !generatedWorldCells.has(key)) {
+            enqueueCell(worldGenerationQueue, pendingWorldCells, x, z);
+          }
+        }
+      }
+
+      sortGenerationQueue(terrainGenerationQueue, centerCellX, centerCellZ);
+      sortGenerationQueue(worldGenerationQueue, centerCellX, centerCellZ);
+
+      for (const [key, group] of activeWorldCells) {
+        const [cellX, cellZ] = key.split(",").map(Number);
+        if (Math.abs(cellX - centerCellX) > sceneryKeepRadius || Math.abs(cellZ - centerCellZ) > sceneryKeepRadius) {
+          dynamicWorldGroup.remove(group);
+          disposeObject3D(group);
+          activeWorldCells.delete(key);
+          generatedWorldCells.delete(key);
+          dynamicWorldStats.cells = Math.max(0, dynamicWorldStats.cells - 1);
+          dynamicWorldStats.objects = Math.max(0, dynamicWorldStats.objects - (group.userData.objectCount || 0));
+        }
+      }
+
+      for (const [key, terrainCell] of activeTerrainCells) {
+        const [cellX, cellZ] = key.split(",").map(Number);
+        if (Math.abs(cellX - centerCellX) > terrainKeepRadius || Math.abs(cellZ - centerCellZ) > terrainKeepRadius) {
+          dynamicTerrainGroup.remove(terrainCell);
+          terrainCell.geometry.dispose();
+          activeTerrainCells.delete(key);
+          generatedTerrainCells.delete(key);
+          dynamicWorldStats.terrainCells = Math.max(0, dynamicWorldStats.terrainCells - 1);
+        }
+      }
+
+      pruneDynamicColliders(centerCellX, centerCellZ, sceneryKeepRadius);
+    }
+
+    addAirportScene();
+    updateDynamicWorld(true);
+
+    function addGrassClumps() {
+      const material = new THREE.MeshStandardMaterial({
+        color: 0x6ea943,
+        roughness: 0.92,
+        side: THREE.DoubleSide
+      });
+
+      const geometry = new THREE.PlaneGeometry(0.32, 1.15);
+
+      for (let i = 0; i < 220; i++) {
+        const x = (Math.random() - 0.5) * WORLD_SIZE * 0.96;
+        const z = (Math.random() - 0.5) * WORLD_SIZE * 0.96;
+        const y = terrainHeight(x, z);
+
+        if (airportFlatMask(x, z) > 0.18 || Math.sqrt(x * x + z * z) < 10) continue;
+
+        const blade = new THREE.Mesh(geometry, material);
+        blade.position.set(x, y + 0.48, z);
+        blade.rotation.y = Math.random() * Math.PI;
+        blade.rotation.z = (Math.random() - 0.5) * 0.28;
+        blade.scale.setScalar(0.55 + Math.random() * 0.9);
+        blade.castShadow = false;
+        blade.receiveShadow = false;
+        scene.add(blade);
+      }
+    }
+
+    addGrassClumps();
+
+    function addSkyAndClouds() {
+      const cloudMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 1,
+        transparent: true,
+        opacity: 0.58
+      });
+
+      for (let i = 0; i < 14; i++) {
+        const cloud = new THREE.Group();
+        cloud.position.set(
+          (Math.random() - 0.5) * 520,
+          60 + Math.random() * 45,
+          (Math.random() - 0.5) * 520
+        );
+
+        for (let j = 0; j < 3 + Math.floor(Math.random() * 4); j++) {
+          const puff = new THREE.Mesh(
+            new THREE.SphereGeometry(7 + Math.random() * 10, 8, 6),
+            cloudMaterial
+          );
+          puff.position.set((Math.random() - 0.5) * 28, (Math.random() - 0.5) * 5, (Math.random() - 0.5) * 15);
+          puff.scale.y = 0.35 + Math.random() * 0.24;
+          cloud.add(puff);
+        }
+
+        scene.add(cloud);
+      }
+    }
+
+    addSkyAndClouds();
+
+    function keepInsideWorld(position) {
+      // O mundo agora é gerado dinamicamente ao redor do jogador/avião.
+      // Não prende mais a posição no quadrado inicial.
+    }
+
+    function resolveHorizontalCollisions(position) {
+      for (let iteration = 0; iteration < COLLISION_ITERATIONS; iteration++) {
+        for (const collider of solidColliders) {
+          const dx = position.x - collider.x;
+          const dz = position.z - collider.z;
+          const distanceSq = dx * dx + dz * dz;
+          const minDistance = PLAYER_RADIUS + collider.radius;
+
+          if (distanceSq <= 0.0001 || distanceSq >= minDistance * minDistance) continue;
+
+          let blocksPlayer = false;
+
+          if (collider.type === "cylinder") {
+            const feet = position.y;
+            const head = position.y + PLAYER_HEIGHT;
+            blocksPlayer = head > collider.yMin + 0.12 && feet < collider.yMax;
+          }
+
+          if (collider.type === "sphere") {
+            const playerMiddle = position.y + PLAYER_HEIGHT * 0.48;
+            const verticalDistance = Math.abs(playerMiddle - collider.yCenter);
+            blocksPlayer = verticalDistance < PLAYER_HEIGHT * 0.55 + collider.radius;
+          }
+
+          if (!blocksPlayer) continue;
+
+          const distance = Math.sqrt(distanceSq);
+          const push = minDistance - distance;
+          position.x += (dx / distance) * push;
+          position.z += (dz / distance) * push;
+        }
+
+        keepInsideWorld(position);
+      }
+    }
+
+    function updatePlayer(delta) {
+      if (aircraft.pilotMode) return;
+
+      const forwardInput = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
+      const rightInput = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
+
+      const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+      const right = new THREE.Vector3(Math.cos(player.yaw), 0, -Math.sin(player.yaw));
+      const wishDirection = new THREE.Vector3();
+
+      wishDirection.addScaledVector(forward, forwardInput);
+      wishDirection.addScaledVector(right, rightInput);
+
+      if (wishDirection.lengthSq() > 0) wishDirection.normalize();
+
+      const speed = keys.has("ShiftLeft") || keys.has("ShiftRight") ? RUN_SPEED : WALK_SPEED;
+      const targetVX = wishDirection.x * speed;
+      const targetVZ = wishDirection.z * speed;
+
+      const acceleration = player.grounded ? 14 : 4.5;
+      player.velocity.x += (targetVX - player.velocity.x) * clamp(acceleration * delta, 0, 1);
+      player.velocity.z += (targetVZ - player.velocity.z) * clamp(acceleration * delta, 0, 1);
+
+      player.velocity.y -= GRAVITY * delta;
+
+      const nextPosition = player.position.clone();
+      nextPosition.x += player.velocity.x * delta;
+      nextPosition.z += player.velocity.z * delta;
+
+      keepInsideWorld(nextPosition);
+      resolveHorizontalCollisions(nextPosition);
+
+      const nextGround = terrainHeight(nextPosition.x, nextPosition.z);
+      const currentGround = terrainHeight(player.position.x, player.position.z);
+      const groundDelta = nextGround - currentGround;
+
+      if (player.grounded && groundDelta > MAX_STEP_HEIGHT) {
+        nextPosition.x = player.position.x;
+        nextPosition.z = player.position.z;
+        player.velocity.x *= 0.15;
+        player.velocity.z *= 0.15;
+      }
+
+      nextPosition.y += player.velocity.y * delta;
+
+      const groundHeight = terrainHeight(nextPosition.x, nextPosition.z);
+      player.groundHeight = groundHeight;
+
+      if (nextPosition.y <= groundHeight) {
+        nextPosition.y = groundHeight;
+        player.velocity.y = 0;
+        player.grounded = true;
+      } else {
+        player.grounded = false;
+      }
+
+      player.position.copy(nextPosition);
+      camera.position.set(player.position.x, player.position.y + EYE_HEIGHT, player.position.z);
+      camera.rotation.set(player.pitch, player.yaw, 0);
+    }
+
+    function toggleAircraftPilot() {
+      if (!aircraft.group) return;
+
+      if (aircraft.pilotMode) {
+        aircraft.pilotMode = false;
+        player.position.copy(aircraft.position);
+        player.position.y = Math.max(terrainHeight(player.position.x, player.position.z), aircraft.position.y - 1.8);
+        player.velocity.set(0, 0, 0);
+        player.yaw = aircraft.yaw + Math.PI;
+        player.pitch = -0.08;
+
+        const groundHeight = terrainHeight(aircraft.position.x, aircraft.position.z);
+        if (aircraft.flying || aircraft.position.y > groundHeight + 7) {
+          aircraft.autopilot = true;
+          aircraft.autopilotPhase = "approach";
+          aircraft.autopilotTimer = 0;
+          aircraft.enginePower = Math.max(aircraft.enginePower, 0.64);
+          aircraft.speed = clamp(aircraft.speed, 36, 72);
+          aircraft.flying = true;
+        }
+
+        return;
+      }
+
+      const distanceToAircraft = player.position.distanceTo(aircraft.position);
+      if (distanceToAircraft > 18) return;
+
+      aircraft.pilotMode = true;
+      aircraft.speed = Math.max(aircraft.speed, 8);
+      aircraft.flying = aircraft.position.y > terrainHeight(aircraft.position.x, aircraft.position.z) + 3.2;
+      player.velocity.set(0, 0, 0);
+    }
+
+    function updateAircraft(delta) {
+      if (!aircraft.group) return;
+
+      const groundHeight = terrainHeight(aircraft.position.x, aircraft.position.z);
+      const minHeight = groundHeight + AIRCRAFT_GROUND_CLEARANCE;
+
+      if (aircraft.pilotMode) {
+        const throttle = keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0;
+        const brake = keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0;
+        const turbo = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 1.45 : 1;
+        const turnInput = (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0) - (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0);
+        const climbInput = (keys.has("Space") ? 1 : 0) - ((keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC")) ? 1 : 0);
+
+        const targetEnginePower = throttle > 0 ? turbo : 0;
+        aircraft.enginePower += (targetEnginePower - aircraft.enginePower) * clamp(delta * 3.8, 0, 1);
+        aircraft.speed += aircraft.enginePower * 31 * delta;
+        aircraft.speed -= brake * 34 * delta;
+        aircraft.speed -= (3.8 + (1 - aircraft.enginePower) * 2.4) * delta;
+        aircraft.speed = clamp(aircraft.speed, 0, 105);
+
+        const airborne = aircraft.position.y > minHeight + 1.2 || climbInput > 0;
+        aircraft.flying = airborne;
+
+        const turnStrength = aircraft.flying ? 0.42 : 0.24;
+        const speedTurnFactor = clamp(aircraft.speed / 32, 0.12, 1.15);
+        aircraft.yaw += turnInput * turnStrength * delta * speedTurnFactor;
+        aircraft.roll += (-turnInput * 0.28 - aircraft.roll) * clamp(delta * 2.6, 0, 1);
+
+        const targetPitch = aircraft.flying
+          ? clamp(climbInput * 0.34, -0.34, 0.36)
+          : 0;
+        aircraft.pitch += (targetPitch - aircraft.pitch) * clamp(delta * 3.2, 0, 1);
+
+        const forward = new THREE.Vector3(Math.cos(aircraft.yaw), 0, -Math.sin(aircraft.yaw));
+        aircraft.velocity.copy(forward).multiplyScalar(aircraft.speed);
+        aircraft.position.addScaledVector(forward, aircraft.speed * delta);
+
+        if (aircraft.flying) {
+          const verticalSpeed = climbInput * 12;
+          aircraft.position.y += verticalSpeed * delta;
+          aircraft.position.y -= Math.max(0, 34 - aircraft.speed) * 0.35 * delta;
+        } else {
+          aircraft.position.y = minHeight;
+        }
+
+        const currentGround = terrainHeight(aircraft.position.x, aircraft.position.z);
+        const currentMinHeight = currentGround + AIRCRAFT_GROUND_CLEARANCE;
+        if (aircraft.position.y <= currentMinHeight) {
+          aircraft.position.y = currentMinHeight;
+          aircraft.pitch = Math.max(aircraft.pitch, 0);
+          aircraft.roll *= 0.82;
+          aircraft.flying = aircraft.speed > 42 && climbInput > 0;
+        }
+      } else {
+        if (aircraft.autopilot) {
+          aircraft.autopilotTimer += delta;
+
+          const runwayX = 0;
+          const runwayTouchdownZ = -24;
+          const runwayEndZ = 42;
+          const approachZ = aircraft.position.z < runwayTouchdownZ ? -92 : 92;
+          const runwayGround = terrainHeight(runwayX, runwayTouchdownZ);
+          const distanceToCenter = Math.hypot(aircraft.position.x - runwayX, aircraft.position.z - runwayTouchdownZ);
+          const altitude = aircraft.position.y - groundHeight;
+
+          if (aircraft.autopilotPhase === "approach" && distanceToCenter < 95 && altitude < 24) {
+            aircraft.autopilotPhase = "final";
+          }
+
+          if (aircraft.autopilotPhase === "final" && Math.abs(aircraft.position.x) < 7 && Math.abs(aircraft.position.z - runwayTouchdownZ) < 22) {
+            aircraft.autopilotPhase = "flare";
+          }
+
+          if (aircraft.autopilotPhase === "flare" && aircraft.position.y <= minHeight + 0.55) {
+            aircraft.autopilotPhase = "rollout";
+            aircraft.flying = false;
+            aircraft.position.y = minHeight;
+            aircraft.pitch = 0;
+            aircraft.roll = 0;
+          }
+
+          const targetX = aircraft.autopilotPhase === "approach" ? runwayX : 0;
+          const targetZ = aircraft.autopilotPhase === "approach" ? approachZ : runwayEndZ;
+          const desiredYaw = Math.atan2(-(targetZ - aircraft.position.z), targetX - aircraft.position.x);
+          const yawError = Math.atan2(Math.sin(desiredYaw - aircraft.yaw), Math.cos(desiredYaw - aircraft.yaw));
+          const turnRate = aircraft.autopilotPhase === "rollout" ? 0.35 : 0.72;
+
+          aircraft.yaw += clamp(yawError, -turnRate * delta, turnRate * delta);
+          aircraft.roll += (clamp(-yawError * 0.42, -0.32, 0.32) - aircraft.roll) * clamp(delta * 2.8, 0, 1);
+
+          const desiredSpeed = aircraft.autopilotPhase === "approach" ? 58 : aircraft.autopilotPhase === "final" ? 46 : aircraft.autopilotPhase === "flare" ? 34 : 0;
+          aircraft.enginePower += ((desiredSpeed > aircraft.speed ? 0.68 : 0.18) - aircraft.enginePower) * clamp(delta * 2.2, 0, 1);
+          aircraft.speed += (desiredSpeed - aircraft.speed) * clamp(delta * (aircraft.autopilotPhase === "rollout" ? 1.8 : 0.55), 0, 1);
+
+          const forward = new THREE.Vector3(Math.cos(aircraft.yaw), 0, -Math.sin(aircraft.yaw));
+          aircraft.velocity.copy(forward).multiplyScalar(aircraft.speed);
+          aircraft.position.addScaledVector(forward, aircraft.speed * delta);
+
+          const progressToRunway = clamp(1 - Math.abs(aircraft.position.z - runwayTouchdownZ) / 150, 0, 1);
+          const targetAltitude = aircraft.autopilotPhase === "approach"
+            ? 34
+            : aircraft.autopilotPhase === "final"
+              ? THREE.MathUtils.lerp(20, 5.5, progressToRunway)
+              : aircraft.autopilotPhase === "flare"
+                ? 2.95
+                : AIRCRAFT_GROUND_CLEARANCE;
+
+          const targetY = Math.max(terrainHeight(aircraft.position.x, aircraft.position.z) + targetAltitude, runwayGround + AIRCRAFT_GROUND_CLEARANCE);
+          aircraft.position.y += (targetY - aircraft.position.y) * clamp(delta * (aircraft.autopilotPhase === "flare" ? 1.55 : 0.72), 0, 1);
+          aircraft.pitch += ((aircraft.autopilotPhase === "flare" ? 0.08 : clamp((targetY - aircraft.position.y) * 0.018, -0.18, 0.16)) - aircraft.pitch) * clamp(delta * 2.4, 0, 1);
+
+          const currentGround = terrainHeight(aircraft.position.x, aircraft.position.z);
+          const currentMinHeight = currentGround + 2.78;
+          if (aircraft.position.y <= currentMinHeight + 0.08 && aircraft.autopilotPhase !== "approach") {
+            aircraft.position.y = currentMinHeight;
+            aircraft.autopilotPhase = "rollout";
+            aircraft.flying = false;
+            aircraft.pitch = 0;
+            aircraft.roll *= 0.75;
+          }
+
+          if (aircraft.autopilotPhase === "rollout" && aircraft.speed < 1.2) {
+            aircraft.speed = 0;
+            aircraft.enginePower = 0;
+            aircraft.autopilot = false;
+            aircraft.autopilotPhase = "idle";
+          }
+        } else {
+          aircraft.enginePower += (0 - aircraft.enginePower) * clamp(delta * 2.4, 0, 1);
+          aircraft.roll *= 0.92;
+          aircraft.pitch *= 0.92;
+          if (!aircraft.flying) {
+            aircraft.position.y = minHeight;
+          }
+        }
+      }
+
+      aircraft.group.position.copy(aircraft.position);
+      aircraft.group.rotation.set(aircraft.roll, aircraft.yaw, aircraft.pitch);
+
+      if (aircraft.pilotMode) {
+        const forward = new THREE.Vector3(Math.cos(aircraft.yaw), Math.sin(aircraft.pitch) * 0.42, -Math.sin(aircraft.yaw)).normalize();
+
+        if (aircraft.cockpitCamera) {
+          const cockpitEye = aircraft.position.clone().addScaledVector(forward, 6.35);
+          cockpitEye.y += 3.05;
+          camera.position.copy(cockpitEye);
+
+          const lookTarget = cockpitEye.clone().addScaledVector(forward, 120);
+          lookTarget.y += 1.05 + aircraft.pitch * 20;
+          camera.lookAt(lookTarget);
+        } else {
+          const chaseEye = aircraft.position.clone().addScaledVector(forward, -17);
+          chaseEye.y += 8;
+          camera.position.copy(chaseEye);
+          const chaseTarget = aircraft.position.clone().addScaledVector(forward, 85);
+          chaseTarget.y += 2.2;
+          camera.lookAt(chaseTarget);
+        }
+      }
+    }
+
+    function updateMiniMap() {
+      const ctx = minimapContext;
+      const size = minimapCanvas.width;
+      const center = size / 2;
+      const scale = size / minimapRange;
+      const trackedPosition = aircraft.pilotMode ? aircraft.position : player.position;
+      const trackedYaw = aircraft.pilotMode ? aircraft.yaw : player.yaw + Math.PI / 2;
+      const mapCenterX = trackedPosition.x;
+      const mapCenterZ = trackedPosition.z;
+
+      function mapX(worldX) {
+        return center + (worldX - mapCenterX) * scale;
+      }
+
+      function mapY(worldZ) {
+        return center + (worldZ - mapCenterZ) * scale;
+      }
+
+      ctx.clearRect(0, 0, size, size);
+
+      const skyGradient = ctx.createRadialGradient(center, center, 12, center, center, center);
+      skyGradient.addColorStop(0, "rgba(64, 116, 73, 0.95)");
+      skyGradient.addColorStop(1, "rgba(12, 35, 32, 0.96)");
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, size, size);
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.09)";
+      ctx.lineWidth = 1;
+      for (let grid = -minimapRange; grid <= minimapRange; grid += 80) {
+        const gx = mapX(Math.round(trackedPosition.x / 80) * 80 + grid);
+        const gy = mapY(Math.round(trackedPosition.z / 80) * 80 + grid);
+        ctx.beginPath();
+        ctx.moveTo(gx, 0);
+        ctx.lineTo(gx, size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, gy);
+        ctx.lineTo(size, gy);
+        ctx.stroke();
+      }
+
+      const runwayX = mapX(runwayMarker.x);
+      const runwayTop = mapY(runwayMarker.northZ);
+      const runwayBottom = mapY(runwayMarker.southZ);
+      const runwayWidth = Math.max(7, runwayMarker.width * scale);
+      ctx.fillStyle = "rgba(32, 34, 38, 0.98)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(runwayX - runwayWidth / 2, runwayTop, runwayWidth, runwayBottom - runwayTop);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(255, 236, 120, 0.95)";
+      ctx.setLineDash([7, 7]);
+      ctx.beginPath();
+      ctx.moveTo(runwayX, runwayTop + 8);
+      ctx.lineTo(runwayX, runwayBottom - 8);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "800 11px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("PISTA", runwayX, runwayTop - 8);
+
+      ctx.fillStyle = "rgba(90, 90, 90, 0.9)";
+      ctx.fillRect(mapX(22) - 2, mapY(-39), 18, 5);
+      ctx.fillRect(mapX(49) - 12, mapY(-47), 24, 24);
+      ctx.fillRect(mapX(-59) - 14, mapY(-61), 28, 23);
+
+      const trackedMapX = center;
+      const trackedMapY = center;
+      const runwayMapX = clamp(mapX(runwayMarker.x), 14, size - 14);
+      const runwayMapY = clamp(mapY(runwayMarker.z), 14, size - 14);
+
+      ctx.strokeStyle = "rgba(255, 84, 84, 0.72)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(trackedMapX, trackedMapY);
+      ctx.lineTo(runwayMapX, runwayMapY);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 84, 84, 0.95)";
+      ctx.beginPath();
+      ctx.arc(runwayMapX, runwayMapY, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.save();
+      ctx.translate(trackedMapX, trackedMapY);
+      ctx.rotate(Math.PI / 2 - trackedYaw);
+      ctx.fillStyle = "#ffe66d";
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -11);
+      ctx.lineTo(7, 8);
+      ctx.lineTo(0, 4);
+      ctx.lineTo(-7, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      const trackedWorldPosition = aircraft.pilotMode ? aircraft.group.position : player.position;
+      const targetDistance = Math.hypot(
+        runwayMarker.x - trackedWorldPosition.x,
+        runwayMarker.z - trackedWorldPosition.z
+      );
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.52)";
+      ctx.fillRect(44, size - 25, 102, 16);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "700 10px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(`${targetDistance.toFixed(0)} m até a pista`, center, size - 13);
+    }
+
+    function updateHud() {
+      const hud = document.getElementById("hud");
+      const grounded = player.grounded ? "sim" : "não";
+      const aircraftStatus = aircraft.pilotMode ? "pilotando" : aircraft.autopilot ? "piloto automático" : "a pé";
+      const flightStatus = aircraft.flying ? "voando" : aircraft.autopilotPhase === "rollout" ? "pousando na pista" : "na pista";
+      const cameraStatus = aircraft.pilotMode
+        ? (aircraft.cockpitCamera ? "cabine do piloto" : "aérea")
+        : "primeira pessoa";
+      hud.innerHTML =
+        "<strong>Aeroporto realista ativo</strong><br />" +
+        "F: entrar/sair do avião | V: alternar câmera cabine/aérea | WASD/setas: mover/pilotar<br />" +
+        "Avião: W/↑ acelera, S/↓ freia, A/D ou ←/→ viram, Espaço sobe, Ctrl/C desce, Shift turbo<br />" +
+        "Mouse: olhar | Clique: travar câmera | Mapa: canto superior direito<br />" +
+        `Modo: ${aircraftStatus} | Câmera: ${cameraStatus} | Avião: ${flightStatus} | Velocidade: ${aircraft.speed.toFixed(0)} | Motor: ${(aircraft.enginePower * 100).toFixed(0)}%<br />` +
+        `Mundo dinâmico: ${dynamicWorldStats.terrainCells} terrenos / ${dynamicWorldStats.cells} células / ${dynamicWorldStats.objects} objetos<br />` +
+        `Gravidade: ${GRAVITY} | No chão: ${grounded}<br />` +
+        `Colisores sólidos: ${solidColliders.length}`;
+    }
+
+    function updateAirportAnimations(elapsed, delta) {
+      const animationDelta = Math.min(delta, 0.033);
+      updateAutonomousTraffic(elapsed);
+      for (const propeller of propellers) {
+        const spinSpeed = aircraft.pilotMode || aircraft.enginePower > 0.03 || aircraft.speed > 1
+          ? 18 + aircraft.enginePower * 76 + aircraft.speed * 1.9
+          : 10;
+        propeller.rotation.x += spinSpeed * animationDelta;
+      }
+
+      for (const object of animatedObjects) {
+        if (object.userData.animation === "engineGlow") {
+          const thrust = clamp(aircraft.enginePower + aircraft.speed / 90, 0.08, 1.55);
+          object.scale.x = 0.55 + thrust * 1.55 + Math.sin(elapsed * 18 + object.userData.phase) * 0.12;
+          object.material.opacity = 0.18 + thrust * 0.46;
+          object.material.emissiveIntensity = 0.22 + thrust * 1.65;
+        }
+
+        if (object.userData.animation === "pulse") {
+          const pulse = 0.75 + Math.sin(elapsed * 4.5 + object.userData.phase) * 0.45;
+          object.scale.setScalar(1 + pulse * 0.18);
+          object.material.emissiveIntensity = 0.65 + pulse * 1.15;
+        }
+
+        if (object.userData.animation === "windsock") {
+          object.rotation.y = Math.sin(elapsed * 1.8 + object.userData.phase) * 0.32;
+          object.rotation.x = Math.sin(elapsed * 4.2 + object.userData.phase) * 0.08;
+        }
+      }
+    }
+
+    let dynamicWorldTimer = 0;
+    let minimapTimer = 0;
+    let hudTimer = 0;
+
+    function animate() {
+      const delta = Math.min(clock.getDelta(), 0.045);
+
+      if (aircraft.pilotMode) {
+        updateAircraft(delta);
+      } else {
+        updateAircraft(delta);
+        updatePlayer(delta);
+      }
+
+      dynamicWorldTimer += delta;
+      minimapTimer += delta;
+      hudTimer += delta;
+
+      if (dynamicWorldTimer >= 0.18) {
+        updateDynamicWorld();
+        dynamicWorldTimer = 0;
+      }
+
+      processDynamicGeneration();
+
+      updateAirportAnimations(clock.elapsedTime, delta);
+
+      if (minimapTimer >= 0.2) {
+        updateMiniMap();
+        minimapTimer = 0;
+      }
+
+      if (hudTimer >= 0.12) {
+        updateHud();
+        hudTimer = 0;
+      }
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowLeft", "ArrowDown", "ArrowRight", "Space", "ControlLeft", "ControlRight", "ShiftLeft", "ShiftRight", "KeyC", "KeyF", "KeyV"].includes(event.code)) {
+        event.preventDefault();
+      }
+
+      keys.add(event.code);
+
+      if (event.code === "KeyF" && !event.repeat) {
+        toggleAircraftPilot();
+      }
+
+      if (event.code === "KeyV" && !event.repeat) {
+        aircraft.cockpitCamera = !aircraft.cockpitCamera;
+      }
+
+      if (!aircraft.pilotMode && event.code === "Space" && player.grounded) {
+        player.velocity.y = JUMP_SPEED;
+        player.grounded = false;
+      }
+    });
+
+    document.addEventListener("keyup", (event) => {
+      keys.delete(event.code);
+    });
+
+    document.addEventListener("mousemove", (event) => {
+      if (document.pointerLockElement !== document.body) return;
+
+      if (aircraft.pilotMode) {
+        aircraft.yaw -= event.movementX * 0.00075;
+        aircraft.pitch -= event.movementY * 0.00085;
+        aircraft.pitch = clamp(aircraft.pitch, -0.42, 0.48);
+        return;
+      }
+
+      player.yaw -= event.movementX * 0.0022;
+      player.pitch -= event.movementY * 0.0022;
+      player.pitch = clamp(player.pitch, -Math.PI / 2 + 0.04, Math.PI / 2 - 0.04);
+    });
+
+    function enterSimulator(event = null) {
+      const startOverlay = document.getElementById("start");
+      if (!startOverlay) return;
+
+      startOverlay.dataset.started = "true";
+      startOverlay.style.opacity = "0";
+      startOverlay.style.pointerEvents = "none";
+      setTimeout(() => {
+        if (document.pointerLockElement === document.body || startOverlay.dataset.started === "true") {
+          startOverlay.style.display = "none";
+        }
+      }, 120);
+
+      if (!aircraft.pilotMode) {
+        player.pitch = clamp(player.pitch, -0.18, 0.18);
+      }
+
+      if (document.body.requestPointerLock && event && event.isTrusted) {
+        const pointerLockRequest = document.body.requestPointerLock();
+        if (pointerLockRequest && typeof pointerLockRequest.catch === "function") {
+          pointerLockRequest.catch(() => {});
+        }
+      }
+    }
+
+    document.getElementById("start").addEventListener("click", (event) => enterSimulator(event));
+    document.getElementById("start").addEventListener("touchstart", (event) => {
+      event.preventDefault();
+      enterSimulator(event);
+    }, { passive: false });
+
+    document.addEventListener("pointerlockchange", () => {
+      const startOverlay = document.getElementById("start");
+      if (!startOverlay || startOverlay.dataset.started !== "true") return;
+
+      if (document.pointerLockElement !== document.body) {
+        startOverlay.style.display = "flex";
+        startOverlay.style.opacity = "1";
+        startOverlay.style.pointerEvents = "auto";
+      } else {
+        startOverlay.style.opacity = "0";
+        startOverlay.style.pointerEvents = "none";
+        setTimeout(() => {
+          if (document.pointerLockElement === document.body) {
+            startOverlay.style.display = "none";
+          }
+        }, 120);
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    player.position.y = terrainHeight(player.position.x, player.position.z);
+    player.groundHeight = player.position.y;
+    camera.position.set(player.position.x, player.position.y + EYE_HEIGHT, player.position.z);
+    camera.rotation.set(player.pitch, player.yaw, 0);
+
+    animate();
+  </script>
+</body>
+</html>

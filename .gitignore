@@ -1,0 +1,11 @@
+# Arquivos temporarios e backups gerados pela IDE
+.merotec_attachments/
+.merotec_backups/
+.merotec_system_ai/
+*.bak
+
+# Cache e metadados locais
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
